@@ -1,0 +1,31 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('tasks', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            // Optional: completing this task counts towards unlocking this achievement.
+            $table->foreignId('achievement_id')->nullable()->constrained()->nullOnDelete();
+            $table->string('title');
+            $table->text('description')->nullable();
+            $table->string('tier', 1);               // E, D, C, B, A, S
+            $table->unsignedInteger('xp');           // derived from tier on the server
+            $table->timestamp('completed_at')->nullable();
+            $table->timestamps();
+
+            $table->index(['user_id', 'completed_at']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('tasks');
+    }
+};
