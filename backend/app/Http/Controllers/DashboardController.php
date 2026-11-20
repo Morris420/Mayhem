@@ -4,82 +4,95 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\UserResource;
 use App\Models\Achievement;
-use App\Models\Task;
+use App\Models\TaskCompletion;
+use App\Models\User;
 use App\Support\Progression;
+use App\Support\QuestPlanner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class DashboardController extends Controller
 {
     private const ACTIVITY_DAYS = 14;
 
     /** One request that powers the whole dashboard page. */
-    public function show(Request $request): JsonResponse
+    public function show(Request $request, QuestPlanner $planner): JsonResponse
     {
         $user = $request->user();
-        $tasks = $user->tasks()->with('achievement')->get();
-        $completed = $tasks->whereNotNull('completed_at');
+        $today = now()->startOfDay();
+
+        $completions = TaskCompletion::where('user_id', $user->id)->get(['task_id', 'date', 'xp']);
+        $byDate = $completions->groupBy(fn ($c) => $c->date->toDateString());
+        $todayPlan = $planner->range($user, $today, 1)[0];
+        $achievements = $this->achievements($user);
 
         return response()->json([
             'user' => new UserResource($user),
+            'today' => $todayPlan,
             'stats' => [
-                'total' => $tasks->count(),
-                'completed' => $completed->count(),
-                'pending' => $tasks->count() - $completed->count(),
-                'completion_rate' => $tasks->count() ? (int) round($completed->count() / $tasks->count() * 100) : 0,
-                'streak' => $this->streak($completed),
-                'achievements_unlocked' => $user->achievements()->count(),
+                'quests' => $user->tasks()->count(),
+                'completions' => $completions->count(),
+                'streak' => $this->streak($byDate, $today),
+                'week_xp' => (int) $completions->filter(fn ($c) => $c->date->gte($today->copy()->subDays(6)))->sum('xp'),
+                'achievements_unlocked' => collect($achievements)->where('unlocked', true)->count(),
+                'achievements_total' => count($achievements),
             ],
-            'tiers' => collect(array_keys(Progression::TIER_XP))->map(fn ($tier) => [
-                'tier' => $tier,
-                'total' => $tasks->where('tier', $tier)->count(),
-                'completed' => $completed->where('tier', $tier)->count(),
-            ])->values(),
-            'activity' => $this->activity($completed),
-            'achievements' => $this->achievements($user, $tasks),
+            'tiers' => $this->tiers($user),
+            'activity' => $this->activity($byDate, $today),
+            'achievements' => $achievements,
         ]);
     }
 
-    /** Completed tasks + XP for each of the last N days (oldest first), zero-filled. */
-    private function activity($completed): array
+    /** Completed quests + XP for each of the last N days (oldest first), zero-filled. */
+    private function activity($byDate, Carbon $today): array
     {
-        $byDay = $completed->groupBy(fn (Task $t) => $t->completed_at->toDateString());
-
-        return collect(range(self::ACTIVITY_DAYS - 1, 0))->map(function ($daysAgo) use ($byDay) {
-            $date = now()->subDays($daysAgo)->toDateString();
-            $day = $byDay->get($date, collect());
+        return collect(range(self::ACTIVITY_DAYS - 1, 0))->map(function ($daysAgo) use ($byDate, $today) {
+            $date = $today->copy()->subDays($daysAgo)->toDateString();
+            $day = $byDate->get($date, collect());
 
             return ['date' => $date, 'completed' => $day->count(), 'xp' => (int) $day->sum('xp')];
         })->all();
     }
 
     /** Consecutive days with at least one completion. Today may still be empty. */
-    private function streak($completed): int
+    private function streak($byDate, Carbon $today): int
     {
-        $days = $completed->map(fn (Task $t) => $t->completed_at->toDateString())->unique()->flip();
-
-        $cursor = now();
-        if (! $days->has($cursor->toDateString())) {
-            $cursor = $cursor->subDay();
+        $cursor = $today->copy();
+        if (! $byDate->has($cursor->toDateString())) {
+            $cursor->subDay();
         }
 
         $streak = 0;
-        while ($days->has($cursor->toDateString())) {
+        while ($byDate->has($cursor->toDateString())) {
             $streak++;
-            $cursor = $cursor->subDay();
+            $cursor->subDay();
         }
 
         return $streak;
     }
 
-    /** Whole catalog, with unlocked state and "how far along" from the user's linked tasks. */
-    private function achievements($user, $tasks): array
+    /** How many times quests of each tier have been completed (deleted quests still count). */
+    private function tiers(User $user): array
+    {
+        $quests = $user->tasks()->withTrashed()->withCount('completions')->get();
+
+        return collect(array_keys(Progression::TIER_XP))->map(fn ($tier) => [
+            'tier' => $tier,
+            'quests' => $quests->where('tier', $tier)->whereNull('deleted_at')->count(),
+            'completions' => (int) $quests->where('tier', $tier)->sum('completions_count'),
+        ])->values()->all();
+    }
+
+    /** Catalog with unlocked state and "how far along" from the quests you linked to each. */
+    private function achievements(User $user): array
     {
         $unlocked = $user->achievements()->get()->keyBy('id');
+        $tasks = $user->tasks()->whereNotNull('achievement_id')->withCount('completions')->get()->groupBy('achievement_id');
 
-        return Achievement::orderBy('id')->get()->map(function (Achievement $a) use ($unlocked, $tasks) {
-            $linked = $tasks->where('achievement_id', $a->id);
-            $done = $linked->whereNotNull('completed_at')->count();
+        return Achievement::visibleTo($user)->orderBy('id')->get()->map(function (Achievement $a) use ($unlocked, $tasks) {
+            $linked = $tasks->get($a->id, collect());
+            $done = $linked->where('completions_count', '>', 0)->count();
             $isUnlocked = $unlocked->has($a->id);
 
             return [
@@ -88,8 +101,9 @@ class DashboardController extends Controller
                 'description' => $a->description,
                 'icon' => $a->icon,
                 'tier' => $a->tier,
+                'custom' => $a->isCustom(),
                 'unlocked' => $isUnlocked,
-                'unlocked_at' => $isUnlocked ? \Illuminate\Support\Carbon::parse($unlocked[$a->id]->pivot->unlocked_at)->toIso8601String() : null,
+                'unlocked_at' => $isUnlocked ? Carbon::parse($unlocked[$a->id]->pivot->unlocked_at)->toIso8601String() : null,
                 'linked_tasks' => $linked->count(),
                 'progress' => [
                     'done' => $done,

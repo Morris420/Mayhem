@@ -12,7 +12,7 @@ describe('ActivityChart', () => {
   it('draws one slot per day and labels the busy day', () => {
     const wrapper = mount(ActivityChart, { props: { data } })
     expect(wrapper.findAll('title')).toHaveLength(14)
-    expect(wrapper.text()).toContain('3 QUESTS')
+    expect(wrapper.text()).toContain('3 quests')
   })
 
   it('switches to XP', async () => {

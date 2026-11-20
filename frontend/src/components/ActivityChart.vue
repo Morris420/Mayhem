@@ -42,18 +42,18 @@ const gridLines = computed(() =>
   [0, 0.5, 1].map((f) => ({ y: pad.top + plotH - f * plotH, label: Math.round(max.value * f) })),
 )
 const total = computed(() => values.value.reduce((a, b) => a + b, 0))
-const toggle = 'rounded px-2.5 py-1 font-mono text-[10px] font-bold tracking-wider uppercase transition-colors'
+const toggle = 'rounded-md px-2.5 py-1 text-xs font-medium transition-colors'
 </script>
 
 <template>
   <div>
-    <div class="mb-2 flex items-center justify-between font-mono">
-      <span class="text-[11px] text-slate-400">
-        LAST {{ data.length }} DAYS · <strong class="text-cyan-300">{{ total }}</strong> {{ metric === 'xp' ? 'XP' : 'QUESTS' }}
+    <div class="mb-2 flex items-center justify-between">
+      <span class="text-xs text-slate-400">
+        Last {{ data.length }} days · <strong class="text-slate-100">{{ total }}</strong> {{ metric === 'xp' ? 'XP' : 'quests' }}
       </span>
-      <div class="flex gap-1 rounded-lg border border-cyan-900/50 bg-slate-950/80 p-0.5">
-        <button type="button" :class="[toggle, metric === 'completed' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-cyan-300']" @click="metric = 'completed'">Quests</button>
-        <button type="button" :class="[toggle, metric === 'xp' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-500 hover:text-cyan-300']" @click="metric = 'xp'">XP</button>
+      <div class="flex gap-0.5 rounded-lg bg-slate-800 p-0.5">
+        <button type="button" :class="[toggle, metric === 'completed' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200']" @click="metric = 'completed'">Quests</button>
+        <button type="button" :class="[toggle, metric === 'xp' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-slate-200']" @click="metric = 'xp'">XP</button>
       </div>
     </div>
 
@@ -61,22 +61,22 @@ const toggle = 'rounded px-2.5 py-1 font-mono text-[10px] font-bold tracking-wid
       <defs>
         <linearGradient id="bar-grad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#22d3ee" />
-          <stop offset="100%" stop-color="#2563eb" />
+          <stop offset="100%" stop-color="#0ea5e9" />
         </linearGradient>
       </defs>
 
       <g v-for="g in gridLines" :key="g.y">
-        <line :x1="pad.left" :x2="W - pad.right" :y1="g.y" :y2="g.y" stroke="#164e63" stroke-opacity="0.5" stroke-dasharray="3 4" />
-        <text :x="pad.left - 6" :y="g.y + 3" text-anchor="end" font-size="9" fill="#64748b" font-family="monospace">{{ g.label }}</text>
+        <line :x1="pad.left" :x2="W - pad.right" :y1="g.y" :y2="g.y" stroke="#1e293b" stroke-dasharray="3 4" />
+        <text :x="pad.left - 6" :y="g.y + 3" text-anchor="end" font-size="9" fill="#64748b">{{ g.label }}</text>
       </g>
 
       <g v-for="(b, i) in bars" :key="i">
         <title>{{ b.tip }}</title>
         <!-- faint track so empty days still show a slot -->
-        <rect :x="b.x" :y="pad.top" :width="barW" :height="plotH" rx="3" fill="#0f172a" fill-opacity="0.6" />
-        <rect v-if="b.v > 0" :x="b.x" :y="b.y" :width="barW" :height="b.h" rx="3" :fill="b.isToday ? 'url(#bar-grad)' : '#0891b2'" :fill-opacity="b.isToday ? 1 : 0.7" />
-        <text v-if="b.v > 0" :x="b.x + barW / 2" :y="b.y - 4" text-anchor="middle" font-size="9" fill="#a5f3fc" font-family="monospace">{{ b.v }}</text>
-        <text :x="b.x + barW / 2" :y="H - 8" text-anchor="middle" font-size="9" :fill="b.isToday ? '#22d3ee' : '#64748b'" font-family="monospace" :font-weight="b.isToday ? 'bold' : 'normal'">{{ b.label }}</text>
+        <rect :x="b.x" :y="pad.top" :width="barW" :height="plotH" rx="3" fill="#111827" />
+        <rect v-if="b.v > 0" :x="b.x" :y="b.y" :width="barW" :height="b.h" rx="3" :fill="b.isToday ? 'url(#bar-grad)' : '#334155'" />
+        <text v-if="b.v > 0" :x="b.x + barW / 2" :y="b.y - 4" text-anchor="middle" font-size="9" fill="#cbd5e1">{{ b.v }}</text>
+        <text :x="b.x + barW / 2" :y="H - 8" text-anchor="middle" font-size="9" :fill="b.isToday ? '#22d3ee' : '#64748b'" :font-weight="b.isToday ? 'bold' : 'normal'">{{ b.label }}</text>
       </g>
     </svg>
   </div>

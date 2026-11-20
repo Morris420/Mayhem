@@ -14,6 +14,7 @@ const router = createRouter({
       children: [
         { path: '', redirect: { name: 'dashboard' } },
         { path: 'dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
+        { path: 'calendar', name: 'calendar', component: () => import('@/views/CalendarView.vue') },
         { path: 'quests', name: 'quests', component: () => import('@/views/QuestBuilderView.vue') },
       ],
     },

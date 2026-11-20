@@ -43,7 +43,7 @@ class TaskFlowTest extends TestCase
 
         $this->postJson("/api/tasks/$id/complete")
             ->assertOk()
-            ->assertJsonPath('task.completed', true)
+            ->assertJsonPath('task.id', $id)
             ->assertJsonPath('user.xp', 400)
             ->assertJsonPath('user.level', 3)      // 400 xp -> level 3 (needs 300)
             ->assertJsonPath('leveled_up', true)
@@ -53,7 +53,7 @@ class TaskFlowTest extends TestCase
         $this->postJson("/api/tasks/$id/complete")->assertOk()->assertJsonPath('user.xp', 400);
 
         $dash = $this->getJson('/api/dashboard')->assertOk();
-        $dash->assertJsonPath('stats.completed', 1)->assertJsonPath('stats.streak', 1)->assertJsonPath('stats.achievements_unlocked', 1);
+        $dash->assertJsonPath('stats.completions', 1)->assertJsonPath('stats.streak', 1)->assertJsonPath('stats.achievements_unlocked', 1);
         $this->assertTrue(collect($dash->json('achievements'))->firstWhere('id', $medal->id)['unlocked']);
     }
 
