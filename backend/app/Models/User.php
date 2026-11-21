@@ -46,6 +46,16 @@ class User extends Authenticatable
         return $this->hasMany(Task::class);
     }
 
+    public function exercises(): HasMany
+    {
+        return $this->hasMany(Exercise::class);
+    }
+
+    public function exerciseLogs(): HasMany
+    {
+        return $this->hasMany(ExerciseLog::class);
+    }
+
     /**
      * Achievements this user has unlocked, with the pivot's unlocked_at
      * timestamp available on each achievement (via $achievement->pivot).
