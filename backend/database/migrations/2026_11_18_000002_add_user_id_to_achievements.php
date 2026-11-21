@@ -9,6 +9,10 @@ return new class extends Migration
     public function up(): void
     {
         // null = built-in achievement (everyone sees it); set = a custom one only its owner sees.
+        if (Schema::hasColumn('achievements', 'user_id')) {
+            return; // already applied (safe to re-run after a partial failure)
+        }
+
         Schema::table('achievements', function (Blueprint $table) {
             $table->foreignId('user_id')->nullable()->constrained()->cascadeOnDelete();
         });

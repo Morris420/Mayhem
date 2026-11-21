@@ -16,45 +16,64 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('tasks', function (Blueprint $table) {
-            $table->json('recurrence')->nullable();        // [1..7] ISO weekdays, Monday = 1
-            $table->date('scheduled_date')->nullable();     // one-off on a specific day
-            $table->date('starts_on')->nullable();          // first day a recurring quest applies
-            $table->softDeletes();                          // deleting keeps your history intact
-        });
+        // Every step checks whether it already happened, so if this migration ever stops
+        // half-way (MySQL cannot roll back schema changes) you can simply run it again.
 
-        Schema::create('task_completions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('task_id')->constrained()->cascadeOnDelete();
-            $table->date('date');
-            $table->unsignedInteger('xp');                  // XP at the time (editing a quest later won't rewrite history)
-            $table->timestamp('completed_at')->nullable();
-            $table->timestamps();
+        if (! Schema::hasColumn('tasks', 'recurrence')) {
+            Schema::table('tasks', function (Blueprint $table) {
+                $table->json('recurrence')->nullable();        // [1..7] ISO weekdays, Monday = 1
+                $table->date('scheduled_date')->nullable();     // one-off on a specific day
+                $table->date('starts_on')->nullable();          // first day a recurring quest applies
+                $table->softDeletes();                          // deleting keeps your history intact
+            });
+        }
 
-            $table->unique(['task_id', 'date']);
-            $table->index(['user_id', 'date']);
-        });
+        if (! Schema::hasTable('task_completions')) {
+            Schema::create('task_completions', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+                $table->foreignId('task_id')->constrained()->cascadeOnDelete();
+                $table->date('date');
+                $table->unsignedInteger('xp');                  // XP at the time (editing a quest later won't rewrite history)
+                $table->timestamp('completed_at')->nullable();
+                $table->timestamps();
 
-        // Carry over everything completed under the old one-off model.
-        DB::table('tasks')->whereNotNull('completed_at')->orderBy('id')->each(function ($task) {
-            DB::table('task_completions')->insert([
-                'user_id' => $task->user_id,
-                'task_id' => $task->id,
-                'date' => substr($task->completed_at, 0, 10),
-                'xp' => $task->xp,
-                'completed_at' => $task->completed_at,
-                'created_at' => $task->completed_at,
-                'updated_at' => $task->completed_at,
-            ]);
-        });
+                $table->unique(['task_id', 'date']);
+                $table->index(['user_id', 'date']);
+            });
+        }
 
-        Schema::table('tasks', function (Blueprint $table) {
-            $table->dropIndex(['user_id', 'completed_at']);
-        });
-        Schema::table('tasks', function (Blueprint $table) {
-            $table->dropColumn('completed_at');
-        });
+        if (Schema::hasColumn('tasks', 'completed_at')) {
+            // Carry over everything completed under the old one-off model.
+            DB::table('tasks')->whereNotNull('completed_at')->orderBy('id')->each(function ($task) {
+                DB::table('task_completions')->insertOrIgnore([
+                    'user_id' => $task->user_id,
+                    'task_id' => $task->id,
+                    'date' => substr((string) $task->completed_at, 0, 10),
+                    'xp' => $task->xp,
+                    'completed_at' => $task->completed_at,
+                    'created_at' => $task->completed_at,
+                    'updated_at' => $task->completed_at,
+                ]);
+            });
+
+            // MySQL's foreign key on tasks.user_id is leaning on the old (user_id, completed_at)
+            // index. Give it its own plain index first, otherwise dropping the old one fails
+            // with "needed in a foreign key constraint".
+            if (! Schema::hasIndex('tasks', 'tasks_user_id_index')) {
+                Schema::table('tasks', function (Blueprint $table) {
+                    $table->index('user_id');
+                });
+            }
+            if (Schema::hasIndex('tasks', 'tasks_user_id_completed_at_index')) {
+                Schema::table('tasks', function (Blueprint $table) {
+                    $table->dropIndex('tasks_user_id_completed_at_index');
+                });
+            }
+            Schema::table('tasks', function (Blueprint $table) {
+                $table->dropColumn('completed_at');
+            });
+        }
     }
 
     public function down(): void

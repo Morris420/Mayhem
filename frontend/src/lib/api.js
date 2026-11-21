@@ -70,3 +70,14 @@ export const api = {
   put: (path, body = {}) => request('PUT', path, body),
   delete: (path) => request('DELETE', path),
 }
+
+/** Turns any failure into a sentence that says what actually went wrong. */
+export function describeError(e) {
+  if (e instanceof ApiError) {
+    if (e.status >= 500) {
+      return `The server hit an error (${e.status}): ${e.message}. If you just pulled new code, run "php artisan migrate" in the backend folder.`
+    }
+    return e.message
+  }
+  return 'Cannot reach the Laravel server. Check that "php artisan serve" (or XAMPP) is running.'
+}

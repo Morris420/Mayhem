@@ -5,7 +5,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import ScheduleEditor from '@/components/ScheduleEditor.vue'
 import AchievementGrid from '@/components/AchievementGrid.vue'
 import { useGameStore } from '@/stores/game'
-import { ApiError } from '@/lib/api'
+import { ApiError, describeError } from '@/lib/api'
 import { TIERS, TIER_META, TIER_XP, describeSchedule } from '@/lib/tiers'
 
 const game = useGameStore()
@@ -26,6 +26,7 @@ const confirmDeleteId = ref(null)
 const editingId = ref(null)
 const editSchedule = ref({ mode: 'none', days: [], date: '' })
 const search = ref('')
+const loadError = ref('')
 
 const inputClass = 'w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 focus:outline-none'
 const labelClass = 'block text-xs font-medium text-slate-400'
@@ -75,7 +76,7 @@ async function submit() {
     }
   } catch (e) {
     if (e instanceof ApiError && e.status === 422) errors.value = e.errors
-    else generalError.value = e instanceof ApiError ? e.message : 'Cannot reach the server.'
+    else generalError.value = describeError(e)
   } finally {
     submitting.value = false
   }
@@ -111,10 +112,11 @@ async function removeAchievement(a) {
   await game.deleteAchievement(a.id)
 }
 
-onMounted(() => Promise.all([game.refreshAll(), game.loadCatalog()]).catch(() => {}))
+onMounted(() => Promise.all([game.refreshAll(), game.loadCatalog()]).catch((e) => (loadError.value = describeError(e))))
 </script>
 
 <template>
+  <p v-if="loadError" role="alert" class="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">{{ loadError }}</p>
   <div class="grid grid-cols-1 gap-5 lg:grid-cols-12">
     <SystemPanel class="lg:col-span-5">
       <div class="mb-5 inline-flex w-full rounded-lg bg-slate-800 p-0.5 text-sm" role="group" aria-label="What to create">

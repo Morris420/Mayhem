@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
-import { api } from '@/lib/api'
+import { api, describeError } from '@/lib/api'
 import { useGameStore } from '@/stores/game'
 import { useToastStore } from '@/stores/toasts'
 import { TIER_META, WEEKDAYS, addDays, fromISO, mondayOf, toISO } from '@/lib/tiers'
@@ -25,8 +25,8 @@ async function load() {
   error.value = ''
   try {
     week.value = await api.get(`/calendar?start=${toISO(weekStart.value)}&days=7`)
-  } catch {
-    error.value = 'Could not load the calendar. Is the Laravel server running?'
+  } catch (e) {
+    error.value = describeError(e)
   }
 }
 

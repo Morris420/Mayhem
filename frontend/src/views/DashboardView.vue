@@ -9,6 +9,7 @@ import TierBars from '@/components/TierBars.vue'
 import CompletionRing from '@/components/CompletionRing.vue'
 import AchievementGrid from '@/components/AchievementGrid.vue'
 import AppIcon from '@/components/AppIcon.vue'
+import { describeError } from '@/lib/api'
 import { useGameStore } from '@/stores/game'
 import { useToastStore } from '@/stores/toasts'
 
@@ -21,8 +22,8 @@ async function load() {
   loadError.value = ''
   try {
     await game.refreshAll()
-  } catch {
-    loadError.value = 'Could not reach the server. Is the Laravel server running?'
+  } catch (e) {
+    loadError.value = describeError(e)
   }
 }
 
