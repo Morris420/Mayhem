@@ -5,6 +5,7 @@ import ToastStack from '@/components/ToastStack.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useGameStore } from '@/stores/game'
 import { useGymStore } from '@/stores/gym'
+import { useNutritionStore } from '@/stores/nutrition'
 
 // The frame around every logged-in page: top navigation + logout.
 const auth = useAuthStore()
@@ -16,12 +17,14 @@ const links = [
   { name: 'calendar', label: 'Calendar', icon: 'calendar' },
   { name: 'quests', label: 'Quests', icon: 'scroll' },
   { name: 'gym', label: 'Gym', icon: 'dumbbell' },
+  { name: 'nutrition', label: 'Nutrition', icon: 'utensils' },
 ]
 
 async function logout() {
   await auth.logout()
   game.reset()
   useGymStore().reset()
+  useNutritionStore().reset()
   router.push({ name: 'login' })
 }
 </script>

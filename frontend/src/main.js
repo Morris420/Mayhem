@@ -9,6 +9,7 @@ import { setUnauthorizedHandler } from './lib/api'
 import { useAuthStore } from './stores/auth'
 import { useGameStore } from './stores/game'
 import { useGymStore } from './stores/gym'
+import { useNutritionStore } from './stores/nutrition'
 
 const app = createApp(App)
 
@@ -21,6 +22,7 @@ setUnauthorizedHandler(() => {
   useAuthStore().user = null
   useGameStore().reset()
   useGymStore().reset()
+  useNutritionStore().reset()
   if (router.currentRoute.value.name !== 'login') {
     router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
   }

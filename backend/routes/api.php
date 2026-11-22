@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GymController;
+use App\Http\Controllers\NutritionController;
 use App\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +35,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/gym/exercises/{exercise}', [GymController::class, 'destroy']);
     Route::post('/gym/exercises/{exercise}/logs', [GymController::class, 'log']);
     Route::delete('/gym/logs/{log}', [GymController::class, 'destroyLog']);
+
+    Route::get('/nutrition', [NutritionController::class, 'index']);
+    Route::put('/nutrition/goals', [NutritionController::class, 'goals']);
+    Route::get('/nutrition/search', [NutritionController::class, 'search'])->middleware('throttle:30,1');
+    Route::post('/nutrition/entries', [NutritionController::class, 'store']);
+    Route::put('/nutrition/entries/{entry}', [NutritionController::class, 'update']);
+    Route::delete('/nutrition/entries/{entry}', [NutritionController::class, 'destroy']);
 
     Route::get('/achievements', [AchievementController::class, 'index']);
     Route::post('/achievements', [AchievementController::class, 'store']);

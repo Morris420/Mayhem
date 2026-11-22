@@ -15,6 +15,7 @@ const router = createRouter({
         { path: '', redirect: { name: 'dashboard' } },
         { path: 'dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
         { path: 'calendar', name: 'calendar', component: () => import('@/views/CalendarView.vue') },
+        { path: 'nutrition', name: 'nutrition', component: () => import('@/views/NutritionView.vue') },
         { path: 'gym', name: 'gym', component: () => import('@/views/GymView.vue') },
         { path: 'quests', name: 'quests', component: () => import('@/views/QuestBuilderView.vue') },
       ],

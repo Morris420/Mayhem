@@ -13,10 +13,13 @@ import PhysiqueFigure from '@/components/PhysiqueFigure.vue'
 import { describeError } from '@/lib/api'
 import { useGameStore } from '@/stores/game'
 import { useGymStore } from '@/stores/gym'
+import { useNutritionStore } from '@/stores/nutrition'
+import MacroBar from '@/components/MacroBar.vue'
 import { useToastStore } from '@/stores/toasts'
 
 const game = useGameStore()
 const gym = useGymStore()
+const nutrition = useNutritionStore()
 const toasts = useToastStore()
 const busyId = ref(null)
 const loadError = ref('')
@@ -45,6 +48,7 @@ async function complete(id) {
 onMounted(() => {
   load()
   gym.load().catch(() => {})
+  nutrition.load().catch(() => {})
 })
 </script>
 
@@ -102,6 +106,14 @@ onMounted(() => {
             <div class="mt-1 text-right text-[11px] text-slate-500">{{ game.nextAchievement.progress.done }} of {{ game.nextAchievement.linked_tasks }} quests</div>
           </div>
           <p v-else class="text-sm text-slate-400">Link a quest to an achievement when you create it, and your progress shows up here.</p>
+        </SystemPanel>
+
+        <SystemPanel v-if="nutrition.data" title="Nutrition today" icon="utensils">
+          <template #aside><RouterLink :to="{ name: 'nutrition' }" class="text-xs text-slate-400 hover:text-white">Log food →</RouterLink></template>
+          <div class="space-y-4">
+            <MacroBar label="Calories" unit="kcal" :value="nutrition.data.totals.kcal" :goal="nutrition.data.goals.kcal" :state="nutrition.data.status.kcal.state" />
+            <MacroBar label="Protein" unit="g" :value="nutrition.data.totals.protein" :goal="nutrition.data.goals.protein" :state="nutrition.data.status.protein.reached ? 'on' : 'under'" />
+          </div>
         </SystemPanel>
 
         <SystemPanel title="Quests cleared by tier">

@@ -27,6 +27,8 @@ class User extends Authenticatable
     protected $attributes = [
         'xp' => 0,
         'guild' => 'Solo Hunter',
+        'kcal_goal' => 2500,
+        'protein_goal' => 150,
     ];
 
     /**
@@ -44,6 +46,16 @@ class User extends Authenticatable
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);
+    }
+
+    public function foods(): HasMany
+    {
+        return $this->hasMany(Food::class);
+    }
+
+    public function mealEntries(): HasMany
+    {
+        return $this->hasMany(MealEntry::class);
     }
 
     public function exercises(): HasMany
