@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
+import BodyPartIcon from '@/components/BodyPartIcon.vue'
 import { api, describeError } from '@/lib/api'
 import { useGameStore } from '@/stores/game'
 import { useToastStore } from '@/stores/toasts'
@@ -92,6 +94,11 @@ onMounted(load)
           <span v-if="d.total" class="text-xs text-slate-500">{{ d.done }}/{{ d.total }}</span>
         </header>
 
+        <RouterLink v-if="d.workout" :to="{ name: 'gym' }" class="mb-2 flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition-colors" :class="d.workout.trained ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-cyan-500/30 bg-cyan-500/5 text-cyan-300 hover:border-cyan-400/60'" :aria-label="`Workout: ${d.workout.body_parts.join(', ')}`">
+          <BodyPartIcon v-for="p in d.workout.body_parts.slice(0, 3)" :key="p" :part="p" class="h-5 w-5" />
+          <span class="ml-auto font-medium">{{ d.workout.trained ? 'Trained' : 'Workout' }}</span>
+        </RouterLink>
+
         <ul class="flex-1 space-y-1.5">
           <li v-for="it in d.items" :key="it.task_id" class="rounded-lg border p-2 text-xs" :class="it.done ? 'border-transparent bg-slate-800/40' : 'border-slate-700 bg-slate-900'">
             <div class="flex items-start gap-2">
@@ -114,10 +121,10 @@ onMounted(load)
           </li>
         </ul>
 
-        <p v-if="!d.items.length" class="mt-auto pt-4 text-center text-xs text-slate-600">Nothing planned</p>
+        <p v-if="!d.items.length && !d.workout" class="mt-auto pt-4 text-center text-xs text-slate-600">Nothing planned</p>
       </section>
     </div>
 
-    <p class="text-xs text-slate-500">Schedule quests from the Quests page. Google Calendar events and workouts will appear here in a later update.</p>
+    <p class="text-xs text-slate-500">Schedule quests from the Quests page. Google Calendar events will appear here in a later update.</p>
   </div>
 </template>

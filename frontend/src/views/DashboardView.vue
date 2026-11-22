@@ -9,11 +9,14 @@ import TierBars from '@/components/TierBars.vue'
 import CompletionRing from '@/components/CompletionRing.vue'
 import AchievementGrid from '@/components/AchievementGrid.vue'
 import AppIcon from '@/components/AppIcon.vue'
+import PhysiqueFigure from '@/components/PhysiqueFigure.vue'
 import { describeError } from '@/lib/api'
 import { useGameStore } from '@/stores/game'
+import { useGymStore } from '@/stores/gym'
 import { useToastStore } from '@/stores/toasts'
 
 const game = useGameStore()
+const gym = useGymStore()
 const toasts = useToastStore()
 const busyId = ref(null)
 const loadError = ref('')
@@ -38,7 +41,11 @@ async function complete(id) {
   }
 }
 
-onMounted(load)
+// The physique figure is a bonus: if the gym data can't load, the rest of the dashboard still works.
+onMounted(() => {
+  load()
+  gym.load().catch(() => {})
+})
 </script>
 
 <template>
@@ -110,6 +117,23 @@ onMounted(load)
       <AchievementGrid :achievements="game.dashboard.achievements" />
     </SystemPanel>
 
-    <!-- Next build phase: evolving physique model linking to the gym tracker. -->
+    <RouterLink :to="{ name: 'gym' }" class="group flex items-center gap-6 rounded-xl border border-cyan-500/30 bg-gradient-to-br from-[#0a1626] to-[#080d17] p-5 transition-colors hover:border-cyan-300/70" aria-label="Open the gym tracker">
+      <div class="h-48 w-28 shrink-0 sm:h-56 sm:w-32"><PhysiqueFigure :stage="gym.data?.physique.stage ?? 1" /></div>
+      <div class="min-w-0 flex-1">
+        <p class="text-xs tracking-wide text-cyan-300/70 uppercase">Physique · stage {{ gym.data?.physique.stage ?? 1 }} of 5</p>
+        <p class="text-2xl font-bold text-white">{{ gym.data?.physique.name ?? 'Beginner' }}</p>
+        <p class="mt-1 text-sm text-slate-400">
+          <template v-if="gym.data">{{ gym.data.stats.sessions }} workouts logged · {{ gym.data.stats.sessions_this_week }} this week</template>
+          <template v-else>Log your first workout to start building.</template>
+        </p>
+        <template v-if="gym.data?.physique.next">
+          <div class="mt-3 h-1.5 max-w-xs overflow-hidden rounded-full bg-slate-800">
+            <div class="h-full rounded-full bg-cyan-400 transition-all duration-700" :style="{ width: gym.data.physique.next.pct + '%' }"></div>
+          </div>
+          <p class="mt-1 text-xs text-slate-500">{{ gym.data.physique.next.remaining }} more to become {{ gym.data.physique.next.name }}</p>
+        </template>
+        <span class="mt-4 inline-flex items-center gap-1 text-sm font-medium text-cyan-300 group-hover:text-cyan-200">Open gym tracker <AppIcon name="chevron-right" class="h-4 w-4" /></span>
+      </div>
+    </RouterLink>
   </template>
 </template>
