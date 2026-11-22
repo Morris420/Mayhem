@@ -118,7 +118,7 @@ onMounted(() => {
     </SystemPanel>
 
     <RouterLink :to="{ name: 'gym' }" class="group flex items-center gap-6 rounded-xl border border-cyan-500/30 bg-gradient-to-br from-[#0a1626] to-[#080d17] p-5 transition-colors hover:border-cyan-300/70" aria-label="Open the gym tracker">
-      <div class="h-48 w-28 shrink-0 sm:h-56 sm:w-32"><PhysiqueFigure :stage="gym.data?.physique.stage ?? 1" /></div>
+      <div class="h-64 w-32 shrink-0 sm:h-72 sm:w-36"><PhysiqueFigure :stage="gym.data?.physique.stage ?? 1" :progress="(gym.data?.physique.next?.pct ?? 0) / 100" /></div>
       <div class="min-w-0 flex-1">
         <p class="text-xs tracking-wide text-cyan-300/70 uppercase">Physique · stage {{ gym.data?.physique.stage ?? 1 }} of 5</p>
         <p class="text-2xl font-bold text-white">{{ gym.data?.physique.name ?? 'Beginner' }}</p>

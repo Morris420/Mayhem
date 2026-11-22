@@ -56,7 +56,7 @@ const labelClass = 'mb-1 block text-xs font-medium text-slate-400'
 </script>
 
 <template>
-  <form class="space-y-4 rounded-xl border border-cyan-400/40 bg-[#0a1626] p-4 sm:p-5" @submit.prevent="save">
+  <form id="ex-form" class="scroll-mt-20 space-y-4 rounded-xl border border-cyan-400/40 bg-[#0a1626] p-4 sm:p-5" @submit.prevent="save">
     <h2 class="text-sm font-semibold text-white">{{ exercise ? 'Edit exercise' : 'New exercise' }}</h2>
 
     <div>

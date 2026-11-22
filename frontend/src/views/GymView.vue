@@ -47,7 +47,9 @@ async function openForm(exercise = null) {
   editing.value = exercise
   formOpen.value = true
   await nextTick()
-  document.getElementById('ex-name')?.focus()
+  // The form sits at the top of the page, so bring it into view even if you were scrolled far down.
+  document.getElementById('ex-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  document.getElementById('ex-name')?.focus({ preventScroll: true })
 }
 
 async function save(payload) {
@@ -163,9 +165,13 @@ onMounted(load)
         />
       </div>
 
+      <button type="button" class="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-cyan-500/40 py-3 text-sm font-medium text-cyan-300 transition-colors hover:border-cyan-300 hover:bg-cyan-400/5" @click="openForm()">
+        <AppIcon name="plus" class="h-4 w-4" /> Add another exercise
+      </button>
+
       <!-- physique -->
       <section class="flex items-center gap-6 rounded-xl border border-cyan-500/30 bg-gradient-to-br from-[#0a1626] to-[#080d17] p-5">
-        <div class="h-40 w-24 shrink-0"><PhysiqueFigure :stage="gym.data.physique.stage" /></div>
+        <div class="h-52 w-26 shrink-0"><PhysiqueFigure :stage="gym.data.physique.stage" :progress="(gym.data.physique.next?.pct ?? 0) / 100" /></div>
         <div class="min-w-0 flex-1">
           <p class="text-xs tracking-wide text-cyan-300/70 uppercase">Physique · stage {{ gym.data.physique.stage }} of 5</p>
           <p class="text-2xl font-bold text-white">{{ gym.data.physique.name }}</p>
