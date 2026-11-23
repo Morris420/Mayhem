@@ -56,6 +56,7 @@ class AchievementController extends Controller
             'icon' => $a->icon,
             'tier' => $a->tier,
             'custom' => $a->isCustom(),
+            'auto' => $a->isAuto(),
         ];
     }
 }

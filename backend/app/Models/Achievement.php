@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['user_id', 'slug', 'name', 'description', 'icon', 'tier'])]
+#[Fillable(['user_id', 'slug', 'name', 'description', 'icon', 'tier', 'rule', 'threshold'])]
 class Achievement extends Model
 {
     /** Icons a custom achievement can use (must exist in the frontend AppIcon set). */
@@ -25,6 +25,12 @@ class Achievement extends Model
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         return $query->where(fn ($q) => $q->whereNull('user_id')->orWhere('user_id', $user->id));
+    }
+
+    /** True for achievements that unlock by themselves from gym / diet data. */
+    public function isAuto(): bool
+    {
+        return $this->rule !== null;
     }
 
     public function isCustom(): bool

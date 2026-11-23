@@ -6,6 +6,7 @@ use App\Http\Resources\UserResource;
 use App\Models\Achievement;
 use App\Models\TaskCompletion;
 use App\Models\User;
+use App\Support\AchievementEngine;
 use App\Support\Progression;
 use App\Support\QuestPlanner;
 use Illuminate\Http\JsonResponse;
@@ -17,15 +18,17 @@ class DashboardController extends Controller
     private const ACTIVITY_DAYS = 14;
 
     /** One request that powers the whole dashboard page. */
-    public function show(Request $request, QuestPlanner $planner): JsonResponse
+    public function show(Request $request, QuestPlanner $planner, AchievementEngine $engine): JsonResponse
     {
         $user = $request->user();
+        $metrics = $engine->metrics($user);
+        $engine->evaluate($user); // catches up on gym/diet history logged before a rule existed
         $today = now()->startOfDay();
 
         $completions = TaskCompletion::where('user_id', $user->id)->get(['task_id', 'date', 'xp']);
         $byDate = $completions->groupBy(fn ($c) => $c->date->toDateString());
         $todayPlan = $planner->range($user, $today, 1)[0];
-        $achievements = $this->achievements($user);
+        $achievements = $this->achievements($user, $metrics);
 
         return response()->json([
             'user' => new UserResource($user),
@@ -85,15 +88,18 @@ class DashboardController extends Controller
     }
 
     /** Catalog with unlocked state and "how far along" from the quests you linked to each. */
-    private function achievements(User $user): array
+    private function achievements(User $user, array $metrics): array
     {
         $unlocked = $user->achievements()->get()->keyBy('id');
         $tasks = $user->tasks()->whereNotNull('achievement_id')->withCount('completions')->get()->groupBy('achievement_id');
 
-        return Achievement::visibleTo($user)->orderBy('id')->get()->map(function (Achievement $a) use ($unlocked, $tasks) {
+        return Achievement::visibleTo($user)->orderBy('id')->get()->map(function (Achievement $a) use ($unlocked, $tasks, $metrics) {
             $linked = $tasks->get($a->id, collect());
             $done = $linked->where('completions_count', '>', 0)->count();
             $isUnlocked = $unlocked->has($a->id);
+            $auto = $a->isAuto();
+            $value = $auto ? min((int) ($metrics[$a->rule] ?? 0), $a->threshold) : $done;
+            $total = $auto ? $a->threshold : $linked->count();
 
             return [
                 'id' => $a->id,
@@ -104,11 +110,13 @@ class DashboardController extends Controller
                 'custom' => $a->isCustom(),
                 'unlocked' => $isUnlocked,
                 'unlocked_at' => $isUnlocked ? Carbon::parse($unlocked[$a->id]->pivot->unlocked_at)->toIso8601String() : null,
+                'auto' => $auto,
                 'linked_tasks' => $linked->count(),
                 'progress' => [
-                    'done' => $done,
-                    'total' => $linked->count(),
-                    'pct' => $isUnlocked ? 100 : ($linked->count() ? (int) floor($done / $linked->count() * 100) : 0),
+                    'done' => $value,
+                    'total' => $total,
+                    'unit' => $auto ? (AchievementEngine::UNITS[$a->rule] ?? '') : 'quests',
+                    'pct' => $isUnlocked ? 100 : ($total ? (int) floor($value / $total * 100) : 0),
                 ],
             ];
         })->all();

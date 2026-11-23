@@ -158,7 +158,7 @@ class TaskController extends Controller
             'description' => ['nullable', 'string', 'max:1000'],
             'tier' => ['required', Rule::in(array_keys(Progression::TIER_XP))],
             'achievement_id' => ['nullable', 'integer', Rule::exists('achievements', 'id')
-                ->where(fn ($q) => $q->whereNull('user_id')->orWhere('user_id', $user->id))],
+                ->where(fn ($q) => $q->where(fn ($w) => $w->whereNull('user_id')->orWhere('user_id', $user->id))->whereNull('rule'))],
         ] + $this->scheduleRules('schedule.');
     }
 

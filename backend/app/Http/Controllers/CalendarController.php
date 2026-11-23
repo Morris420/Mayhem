@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\DietRules;
 use App\Support\GymPlanner;
 use App\Support\QuestPlanner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class CalendarController extends Controller
 {
@@ -24,7 +26,18 @@ class CalendarController extends Controller
 
         $list = $planner->range($request->user(), $start, $days);
         $workouts = $gym->days($request->user(), $start, $days);
+        $user = $request->user();
+        $end = $start->copy()->addDays($days - 1);
+        $diet = DietRules::perDay($user);
+        $unlockedByDay = $user->achievements()->get()
+            ->filter(fn ($a) => $a->pivot->unlocked_at)
+            ->groupBy(fn ($a) => Carbon::parse($a->pivot->unlocked_at)->timezone(config('app.timezone'))->toDateString())
+            ->map->count();
+
         foreach ($list as &$day) {
+            $t = $diet->get($day['date']);
+            $day['diet'] = $t ? ['logged' => true, 'kcal' => (int) round($t['kcal']), 'protein' => (int) round($t['protein']), 'ok' => $t['ok']] : null;
+            $day['achievements'] = (int) $unlockedByDay->get($day['date'], 0);
             $w = $workouts[$day['date']];
             $day['workout'] = $w['exercises'] ? ['body_parts' => $w['body_parts'], 'exercises' => $w['exercises'], 'trained' => $w['trained']] : null;
         }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Exercise;
 use App\Models\ExerciseLog;
+use App\Support\AchievementEngine;
 use App\Support\GymPlanner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,7 +43,7 @@ class GymController extends Controller
     }
 
     /** Record the weight you lifted. One entry per exercise per day (logging again edits it). */
-    public function log(Request $request, GymPlanner $planner, int $exerciseId): JsonResponse
+    public function log(Request $request, GymPlanner $planner, AchievementEngine $engine, int $exerciseId): JsonResponse
     {
         $exercise = $request->user()->exercises()->findOrFail($exerciseId);
         $data = $request->validate([
@@ -59,7 +60,7 @@ class GymController extends Controller
             ['user_id' => $request->user()->id, 'weight' => $data['weight'], 'sets' => $data['sets'] ?? null, 'reps' => $data['reps'] ?? null],
         );
 
-        return response()->json($this->payload($request, $planner));
+        return response()->json(['unlocked' => $engine->evaluate($request->user())] + $this->payload($request, $planner));
     }
 
     public function destroyLog(Request $request, GymPlanner $planner, int $logId): JsonResponse

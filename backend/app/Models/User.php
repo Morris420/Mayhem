@@ -58,6 +58,11 @@ class User extends Authenticatable
         return $this->hasMany(MealEntry::class);
     }
 
+    public function checklistItems(): HasMany
+    {
+        return $this->hasMany(ChecklistItem::class);
+    }
+
     public function exercises(): HasMany
     {
         return $this->hasMany(Exercise::class);

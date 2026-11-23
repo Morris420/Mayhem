@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ChecklistCheck;
+use App\Models\ChecklistItem;
 use App\Models\Food;
 use App\Models\MealEntry;
+use App\Support\AchievementEngine;
+use App\Support\DietRules;
 use App\Support\FoodSearch;
 use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
@@ -12,8 +16,11 @@ use Illuminate\Support\Collection;
 
 class NutritionController extends Controller
 {
-    /** kcal counts as "on target" within this margin of your goal. Protein just has to reach its goal. */
-    private const KCAL_MARGIN = 0.10;
+    private const DEFAULT_CHECKLIST = ['Vitamins', 'Fruit', 'Vegetables'];
+
+    private const MAX_CHECKLIST = 12;
+
+    private ?array $unlocked = null;
 
     public function index(Request $request): JsonResponse
     {
@@ -42,7 +49,7 @@ class NutritionController extends Controller
         }
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, AchievementEngine $engine): JsonResponse
     {
         $user = $request->user();
         $data = $request->validate([
@@ -72,17 +79,64 @@ class NutritionController extends Controller
             ...$this->macros($food->kcal_100g, $food->protein_100g, (float) $data['grams']),
         ]);
 
+        $this->unlocked = $engine->evaluate($user);
+
         return response()->json($this->payload($request, $this->date($data['date'] ?? null)), 201);
     }
 
-    public function update(Request $request, int $entryId): JsonResponse
+    public function update(Request $request, AchievementEngine $engine, int $entryId): JsonResponse
     {
         $entry = $request->user()->mealEntries()->findOrFail($entryId);
         $data = $request->validate(['grams' => ['required', 'numeric', 'min:1', 'max:5000']]);
 
         $entry->update(['grams' => $data['grams']] + $this->macros($entry->kcal_100g, $entry->protein_100g, (float) $data['grams']));
 
+        $this->unlocked = $engine->evaluate($request->user());
+
         return response()->json($this->payload($request, $entry->date));
+    }
+
+    // --- daily checklist (vitamins, fruit, ...) -----------------------------
+
+    public function addChecklist(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $data = $request->validate(['name' => ['required', 'string', 'max:60'], 'date' => ['nullable', 'date_format:Y-m-d']]);
+        $this->checklistItems($user);
+
+        if ($user->checklistItems()->where('active', true)->count() >= self::MAX_CHECKLIST) {
+            return response()->json(['message' => 'Your checklist is full ('.self::MAX_CHECKLIST.' items). Remove one first.'], 422);
+        }
+        $name = trim($data['name']);
+        $existing = $user->checklistItems()->where('name', $name)->first();
+        $existing ? $existing->update(['active' => true]) : $user->checklistItems()->create(['name' => $name]);
+
+        return response()->json($this->payload($request, $this->date($data['date'] ?? null)), 201);
+    }
+
+    /** Tick or untick an item for a day. */
+    public function check(Request $request, int $itemId): JsonResponse
+    {
+        $user = $request->user();
+        $item = $user->checklistItems()->findOrFail($itemId);
+        $data = $request->validate(['done' => ['required', 'boolean'], 'date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today']]);
+        $date = $data['date'] ?? now()->toDateString();
+
+        if ($data['done']) {
+            ChecklistCheck::firstOrCreate(['checklist_item_id' => $item->id, 'date' => $date], ['user_id' => $user->id]);
+        } else {
+            ChecklistCheck::where('checklist_item_id', $item->id)->whereDate('date', $date)->delete();
+        }
+
+        return response()->json($this->payload($request, $this->date($date)));
+    }
+
+    /** Hides the item from your list; days you already ticked it stay on record. */
+    public function removeChecklist(Request $request, int $itemId): JsonResponse
+    {
+        $request->user()->checklistItems()->findOrFail($itemId)->update(['active' => false]);
+
+        return response()->json($this->payload($request, $this->date($request->query('date'))));
     }
 
     public function destroy(Request $request, int $entryId): JsonResponse
@@ -123,16 +177,16 @@ class NutritionController extends Controller
             : $user->foods()->updateOrCreate(['code' => null, 'name' => $f['name'], 'source' => 'manual'], $values);
     }
 
-    private function status(float $kcal, float $protein, int $kcalGoal, int $proteinGoal): array
+    /** Active checklist items. First visit seeds the defaults. */
+    private function checklistItems($user)
     {
-        $state = $kcal < $kcalGoal * (1 - self::KCAL_MARGIN) ? 'under' : ($kcal > $kcalGoal * (1 + self::KCAL_MARGIN) ? 'over' : 'on');
-        $proteinReached = $protein >= $proteinGoal;
+        if (! $user->checklistItems()->exists()) {
+            foreach (self::DEFAULT_CHECKLIST as $name) {
+                $user->checklistItems()->create(['name' => $name]);
+            }
+        }
 
-        return [
-            'kcal' => ['state' => $state, 'pct' => (int) round($kcal / max(1, $kcalGoal) * 100), 'remaining' => (int) round($kcalGoal - $kcal)],
-            'protein' => ['reached' => $proteinReached, 'pct' => (int) round($protein / max(1, $proteinGoal) * 100), 'remaining' => (int) max(0, round($proteinGoal - $protein))],
-            'day_ok' => $state === 'on' && $proteinReached,
-        ];
+        return $user->checklistItems()->where('active', true)->orderBy('id')->get();
     }
 
     private function payload(Request $request, CarbonInterface $date): array
@@ -153,12 +207,12 @@ class NutritionController extends Controller
             $t = $perDay->get($d, ['kcal' => 0, 'protein' => 0]);
 
             return ['date' => $d, 'kcal' => (int) round($t['kcal']), 'protein' => (int) round($t['protein']), 'logged' => $perDay->has($d)]
-                + ['day_ok' => $perDay->has($d) && $this->status($t['kcal'], $t['protein'], $kcalGoal, $proteinGoal)['day_ok']];
+                + ['day_ok' => $perDay->has($d) && DietRules::status($t['kcal'], $t['protein'], $kcalGoal, $proteinGoal)['day_ok']];
         })->values();
 
         // Streak of consecutive days where both goals were hit (today may still be in progress).
         $cursor = now()->startOfDay();
-        $ok = fn ($d) => $perDay->has($d) && $this->status($perDay[$d]['kcal'], $perDay[$d]['protein'], $kcalGoal, $proteinGoal)['day_ok'];
+        $ok = fn ($d) => $perDay->has($d) && DietRules::status($perDay[$d]['kcal'], $perDay[$d]['protein'], $kcalGoal, $proteinGoal)['day_ok'];
         if (! $ok($cursor->toDateString())) {
             $cursor->subDay();
         }
@@ -172,7 +226,14 @@ class NutritionController extends Controller
         $recentIds = $user->mealEntries()->whereNotNull('food_id')->orderByDesc('id')->limit(60)->pluck('food_id')->unique()->take(12);
         $foods = $user->foods()->whereIn('id', $recentIds)->get()->sortBy(fn ($f) => $recentIds->search($f->id))->values();
 
+        $items = $this->checklistItems($user);
+        $doneIds = ChecklistCheck::where('user_id', $user->id)->whereDate('date', $date->toDateString())->pluck('checklist_item_id');
+        $checklist = $items->map(fn (ChecklistItem $i) => ['id' => $i->id, 'name' => $i->name, 'done' => $doneIds->contains($i->id)])->values();
+
         return [
+            'unlocked' => $this->unlocked ?? [],
+            'checklist' => $checklist,
+            'extras' => ['done' => $checklist->where('done', true)->count(), 'total' => $checklist->count()],
             'date' => $date->toDateString(),
             'is_today' => $date->isSameDay(now()),
             'goals' => ['kcal' => $kcalGoal, 'protein' => $proteinGoal],
@@ -180,7 +241,7 @@ class NutritionController extends Controller
                 'id' => $e->id, 'name' => $e->name, 'grams' => $e->grams, 'kcal' => (int) round($e->kcal), 'protein' => round($e->protein, 1),
             ])->values(),
             'totals' => $totals,
-            'status' => $this->status($totals['kcal'], $totals['protein'], $kcalGoal, $proteinGoal),
+            'status' => DietRules::status($totals['kcal'], $totals['protein'], $kcalGoal, $proteinGoal),
             'week' => $week,
             'streak' => $streak,
             'recent_foods' => $foods->map(fn (Food $f) => [

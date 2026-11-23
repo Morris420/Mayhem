@@ -4,6 +4,7 @@ use App\Http\Controllers\AchievementController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DayController;
 use App\Http\Controllers\GymController;
 use App\Http\Controllers\NutritionController;
 use App\Http\Controllers\TaskController;
@@ -42,6 +43,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/nutrition/entries', [NutritionController::class, 'store']);
     Route::put('/nutrition/entries/{entry}', [NutritionController::class, 'update']);
     Route::delete('/nutrition/entries/{entry}', [NutritionController::class, 'destroy']);
+    Route::post('/nutrition/checklist', [NutritionController::class, 'addChecklist']);
+    Route::put('/nutrition/checklist/{item}', [NutritionController::class, 'check']);
+    Route::delete('/nutrition/checklist/{item}', [NutritionController::class, 'removeChecklist']);
+
+    Route::get('/days/{date}', [DayController::class, 'show']);
 
     Route::get('/achievements', [AchievementController::class, 'index']);
     Route::post('/achievements', [AchievementController::class, 'store']);
