@@ -18,7 +18,7 @@ defineEmits(['delete'])
 
       <div class="min-w-0 flex-1">
         <div class="flex items-start justify-between gap-2">
-          <h3 class="text-sm font-semibold" :class="a.unlocked ? 'text-amber-200' : 'text-slate-100'">{{ a.name }}</h3>
+          <h3 class="text-sm font-semibold" :class="a.unlocked ? 'text-amber-200' : 'text-slate-100'">{{ a.name }}<span v-if="a.auto" class="ml-2 rounded bg-slate-800 px-1.5 py-0.5 align-middle text-[10px] font-medium text-slate-400">automatic</span></h3>
           <button v-if="deletable && a.custom" type="button" class="shrink-0 text-slate-500 hover:text-red-400" :aria-label="`Delete achievement ${a.name}`" @click="$emit('delete', a)">
             <AppIcon name="trash" class="h-4 w-4" />
           </button>
@@ -31,7 +31,8 @@ defineEmits(['delete'])
             <div class="h-full rounded-full bg-cyan-400 transition-all duration-700" :style="{ width: a.progress.pct + '%' }"></div>
           </div>
           <div class="mt-1 text-[11px] text-slate-500">
-            <template v-if="a.linked_tasks">{{ a.progress.done }} of {{ a.linked_tasks }} linked quest{{ a.linked_tasks === 1 ? '' : 's' }} done</template>
+            <template v-if="a.auto">{{ a.progress.done }} of {{ a.progress.total }} {{ a.progress.unit }}</template>
+            <template v-else-if="a.linked_tasks">{{ a.progress.done }} of {{ a.linked_tasks }} linked quest{{ a.linked_tasks === 1 ? '' : 's' }} done</template>
             <template v-else>No quest linked yet</template>
           </div>
         </div>

@@ -14,9 +14,16 @@ export const useToastStore = defineStore('toasts', () => {
     setTimeout(() => dismiss(id), duration)
   }
 
+  // Achievements the server unlocked for you (from gym, food or quests).
+  function announceUnlocked(list = []) {
+    for (const a of list) {
+      push({ title: 'Achievement unlocked', message: a.name, kind: 'achievement', icon: a.icon, duration: 7000 })
+    }
+  }
+
   function dismiss(id) {
     items.value = items.value.filter((t) => t.id !== id)
   }
 
-  return { items, push, dismiss }
+  return { items, push, announceUnlocked, dismiss }
 })

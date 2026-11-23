@@ -50,6 +50,8 @@ const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   return q ? game.tasks.filter((t) => t.title.toLowerCase().includes(q)) : game.tasks
 })
+// Gym/diet achievements unlock by themselves, so they can't be linked to a quest.
+const linkable = computed(() => game.catalog.filter((a) => !a.auto))
 const customAchievements = computed(() => game.catalog.filter((a) => a.custom))
 
 async function submit() {
@@ -158,7 +160,7 @@ onMounted(() => Promise.all([game.refreshAll(), game.loadCatalog()]).catch((e) =
             <label for="achievement" :class="labelClass">Counts towards an achievement <span class="text-slate-600">(optional)</span></label>
             <select id="achievement" v-model="quest.achievementId" :class="inputClass">
               <option :value="null">None</option>
-              <option v-for="a in game.catalog" :key="a.id" :value="a.id">{{ a.name }}{{ a.custom ? ' (yours)' : '' }}</option>
+              <option v-for="a in linkable" :key="a.id" :value="a.id">{{ a.name }}{{ a.custom ? ' (yours)' : '' }}</option>
             </select>
             <p class="text-xs text-slate-500">The achievement unlocks once every quest linked to it has been completed.</p>
           </div>

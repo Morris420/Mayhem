@@ -16,6 +16,7 @@ const editingGoals = ref(false)
 const goalForm = ref({ kcal: 2500, protein: 150 })
 const goalError = ref('')
 const confirmId = ref(null)
+const newExtra = ref('')
 
 async function load(date) {
   loadError.value = ''
@@ -67,6 +68,13 @@ async function saveGrams(entry, ev) {
     return
   }
   await run(() => nutrition.updateEntry(entry.id, g))
+}
+
+async function addExtra() {
+  const name = newExtra.value.trim()
+  if (!name) return
+  await run(() => nutrition.addChecklistItem(name))
+  newExtra.value = ''
 }
 
 function remove(id) {
@@ -132,6 +140,24 @@ onMounted(() => load(nutrition.date))
         <p class="basis-full text-xs text-slate-500">Calories count as "on target" within ±10% of your goal. Protein only needs to reach its goal.</p>
         <p v-if="goalError" role="alert" class="basis-full text-sm text-red-300">{{ goalError }}</p>
       </form>
+    </SystemPanel>
+
+    <SystemPanel title="Daily extras" icon="check">
+      <template #aside><span class="text-xs text-slate-500">{{ d.extras.done }} of {{ d.extras.total }}</span></template>
+      <ul class="flex flex-wrap gap-2">
+        <li v-for="c in d.checklist" :key="c.id" class="flex items-center overflow-hidden rounded-lg border text-sm" :class="c.done ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 bg-slate-900 text-slate-300'">
+          <button type="button" role="checkbox" :aria-checked="c.done" class="flex items-center gap-2 px-3 py-1.5" @click="run(() => nutrition.check(c.id, !c.done))">
+            <span class="flex h-4 w-4 items-center justify-center rounded border" :class="c.done ? 'border-emerald-400 bg-emerald-400 text-slate-950' : 'border-slate-500'"><AppIcon v-if="c.done" name="check" class="h-3 w-3" /></span>
+            {{ c.name }}
+          </button>
+          <button type="button" class="px-2 py-1.5 text-slate-500 hover:text-red-300" :aria-label="`Remove ${c.name}`" @click="run(() => nutrition.removeChecklistItem(c.id))"><AppIcon name="x" class="h-3.5 w-3.5" /></button>
+        </li>
+      </ul>
+      <form class="mt-3 flex gap-2" @submit.prevent="addExtra">
+        <input v-model="newExtra" maxlength="60" placeholder="Add an extra, e.g. Creatine" :class="input" aria-label="New checklist item" />
+        <button type="submit" :disabled="!newExtra.trim()" class="rounded-lg border border-slate-700 px-3 text-sm text-slate-200 hover:border-slate-500 disabled:opacity-40">Add</button>
+      </form>
+      <p class="mt-2 text-xs text-slate-500">Extras are for you to track. Your diet goal counts calories and protein only.</p>
     </SystemPanel>
 
     <div class="grid gap-5 lg:grid-cols-12">

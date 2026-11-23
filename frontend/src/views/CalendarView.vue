@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import BodyPartIcon from '@/components/BodyPartIcon.vue'
+import DayDetail from '@/components/DayDetail.vue'
 import { api, describeError } from '@/lib/api'
 import { useGameStore } from '@/stores/game'
 import { useToastStore } from '@/stores/toasts'
@@ -15,6 +16,7 @@ const weekStart = ref(mondayOf(new Date()))
 const week = ref(null)
 const error = ref('')
 const busyId = ref(null)
+const openDay = ref(null)
 
 const rangeLabel = computed(() => {
   const end = addDays(weekStart.value, 6)
@@ -87,12 +89,21 @@ onMounted(load)
     <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
       <section v-for="d in week.days" :key="d.date" :aria-label="d.date" class="flex min-h-40 flex-col rounded-xl border p-3" :class="d.is_today ? 'border-cyan-500/60 bg-cyan-500/5' : 'border-slate-800 bg-slate-900/50'">
         <header class="mb-2 flex items-baseline justify-between">
-          <div>
+          <button type="button" class="-m-1 rounded p-1 text-left hover:bg-slate-800/60" :aria-label="`Open journal for ${d.date}`" @click="openDay = d.date">
             <span class="text-xs font-medium uppercase" :class="d.is_today ? 'text-cyan-300' : 'text-slate-500'">{{ dayName(d.date) }}</span>
             <span class="ml-1.5 text-lg font-bold" :class="d.is_today ? 'text-white' : 'text-slate-300'">{{ dayNum(d.date) }}</span>
-          </div>
+          </button>
           <span v-if="d.total" class="text-xs text-slate-500">{{ d.done }}/{{ d.total }}</span>
         </header>
+
+        <div v-if="d.diet || d.achievements" class="mb-2 flex flex-wrap gap-1.5">
+          <span v-if="d.diet" :data-testid="d.diet.ok ? 'diet-ok' : 'diet-logged'" class="flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]" :class="d.diet.ok ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 text-slate-400'" :title="`${d.diet.kcal} kcal · ${d.diet.protein} g protein`">
+            <AppIcon :name="d.diet.ok ? 'check' : 'utensils'" class="h-3 w-3" />{{ d.diet.ok ? 'Diet goal' : 'Diet' }}
+          </span>
+          <span v-if="d.achievements" data-testid="ach-badge" class="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300" :title="`${d.achievements} achievement${d.achievements === 1 ? '' : 's'} unlocked`">
+            <AppIcon name="trophy" class="h-3 w-3" />{{ d.achievements }}
+          </span>
+        </div>
 
         <RouterLink v-if="d.workout" :to="{ name: 'gym' }" class="mb-2 flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition-colors" :class="d.workout.trained ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-cyan-500/30 bg-cyan-500/5 text-cyan-300 hover:border-cyan-400/60'" :aria-label="`Workout: ${d.workout.body_parts.join(', ')}`">
           <BodyPartIcon v-for="p in d.workout.body_parts.slice(0, 3)" :key="p" :part="p" class="h-5 w-5" />
@@ -121,10 +132,12 @@ onMounted(load)
           </li>
         </ul>
 
-        <p v-if="!d.items.length && !d.workout" class="mt-auto pt-4 text-center text-xs text-slate-600">Nothing planned</p>
+        <p v-if="!d.items.length && !d.workout && !d.diet" class="mt-auto pt-4 text-center text-xs text-slate-600">Nothing planned</p>
       </section>
     </div>
 
-    <p class="text-xs text-slate-500">Schedule quests from the Quests page. Google Calendar events will appear here in a later update.</p>
+    <DayDetail v-if="openDay" :date="openDay" @close="openDay = null" />
+
+    <p class="text-xs text-slate-500">Click a date to open its journal. Schedule quests from the Quests page. Google Calendar events will appear here in a later update.</p>
   </div>
 </template>
