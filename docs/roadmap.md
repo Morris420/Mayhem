@@ -1,5 +1,11 @@
 # Mayhem roadmap (agreed Nov 24, 2026)
 
+Docs in this folder:
+- `system-guide.md` - what every feature does and how the code behind it works. Start here.
+- `arena-design.md` - the combat game: scope, engine decision, combat maths, milestones.
+- `arena-playbook.md` - the implementation brief for building it (conventions, three.js notes, gotchas).
+- `ai-coach-setup.md`, `google-calendar-setup.md` - setting up the two optional integrations.
+
 Goal: finish and polish the System in 1-2 days of sessions, then build the arena combat game (domains, bosses, PvP) over about 5 weeks.
 
 ## Done (Nov 24-25)
@@ -39,7 +45,7 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
 ## Next session: the arena combat game
 - Full plan, engine comparison, combat maths and milestones: docs/arena-design.md. Read it first.
 - Blocker: this container cannot install npm packages. Turn on network access for package installs and start a NEW chat.
-- First three answers needed: engine (three.js recommended, Unity if the CV matters more), real-time vs turn-based, code-built neon figures vs Mixamo.
+- Engine decided: three.js (+ Rapier). Real-time V1, code-built neon figures. See arena-playbook.md.
 
 ## Later: arena combat game
 - Combat stats computed server-side from skills (Strength attack, Stamina HP, Discipline defense, Intellect ability power, Faith healing/resist, Affection support, Fortune crit/loot, Craft gear).
