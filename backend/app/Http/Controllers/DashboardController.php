@@ -8,6 +8,7 @@ use App\Models\TaskCompletion;
 use App\Models\User;
 use App\Support\AchievementEngine;
 use App\Support\Progression;
+use App\Support\SkillService;
 use App\Support\QuestPlanner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,11 +19,13 @@ class DashboardController extends Controller
     private const ACTIVITY_DAYS = 14;
 
     /** One request that powers the whole dashboard page. */
-    public function show(Request $request, QuestPlanner $planner, AchievementEngine $engine): JsonResponse
+    public function show(Request $request, QuestPlanner $planner, AchievementEngine $engine, SkillService $skillService): JsonResponse
     {
         $user = $request->user();
         $metrics = $engine->metrics($user);
         $engine->evaluate($user); // catches up on gym/diet history logged before a rule existed
+        $skillService->refresh($user); // catches up on history from before skills existed
+        $skills = $skillService->overview($user);
         $today = now()->startOfDay();
 
         $completions = TaskCompletion::where('user_id', $user->id)->get(['task_id', 'date', 'xp']);
@@ -41,10 +44,20 @@ class DashboardController extends Controller
                 'achievements_unlocked' => collect($achievements)->where('unlocked', true)->count(),
                 'achievements_total' => count($achievements),
             ],
+            'skills' => $skills,
+            'total_level' => $skillService->totalLevel($skills),
             'tiers' => $this->tiers($user),
             'activity' => $this->activity($byDate, $today),
             'achievements' => $achievements,
         ]);
+    }
+
+    public function skills(Request $request, SkillService $skillService): JsonResponse
+    {
+        $skillService->refresh($request->user());
+        $skills = $skillService->overview($request->user());
+
+        return response()->json(['skills' => $skills, 'total_level' => $skillService->totalLevel($skills)]);
     }
 
     /** Completed quests + XP for each of the last N days (oldest first), zero-filled. */

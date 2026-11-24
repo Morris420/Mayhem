@@ -5,7 +5,8 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
 ## Done (Nov 24-25)
 - Calendar redesign (time grid, mobile one day), Briefcase, Hunter banner + Today brief.
 
-## Session 1: Skills engine (OSRS-style levels)
+## Session 1: Skills engine (OSRS-style levels) (DONE)
+- Sources: quests -> quest skill, gym day 30 + record 15 -> Strength, diet day on target 25 -> Stamina. Tune in SkillService; curve scale in SkillCurve::SCALE.
 - Catalog of skills + per-user XP ledger. Every XP source (quest, gym log, diet day, achievement, later briefcase/AI quests) writes a ledger row tied to a skill.
 - OSRS-shaped XP curve, scaled to personal pace (tunable constant), cap 99. Total level = sum of skill levels.
 - Quests get a skill (picker in quest builder, default Discipline). Backfill old completions.

@@ -8,6 +8,7 @@ import TodayList from '@/components/TodayList.vue'
 import ActivityChart from '@/components/ActivityChart.vue'
 import TierBars from '@/components/TierBars.vue'
 import CompletionRing from '@/components/CompletionRing.vue'
+import SkillsPanel from '@/components/SkillsPanel.vue'
 import AchievementGrid from '@/components/AchievementGrid.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import PhysiqueFigure from '@/components/PhysiqueFigure.vue'
@@ -64,7 +65,7 @@ onMounted(() => {
   </div>
 
   <template v-else>
-    <HunterBanner :user="game.dashboard.user" :stats="game.dashboard.stats" :today="game.dashboard.today" :achievements="game.dashboard.achievements" :gym="gym.data" :diet-streak="nutrition.data?.streak ?? 0" />
+    <HunterBanner :user="game.dashboard.user" :stats="game.dashboard.stats" :today="game.dashboard.today" :achievements="game.dashboard.achievements" :total-level="game.dashboard.total_level" :gym="gym.data" :diet-streak="nutrition.data?.streak ?? 0" />
 
     <TodayBrief :refresh-key="game.dashboard.stats.completions" />
 
@@ -117,6 +118,10 @@ onMounted(() => {
             <MacroBar label="Calories" unit="kcal" :value="nutrition.data.totals.kcal" :goal="nutrition.data.goals.kcal" :state="nutrition.data.status.kcal.state" />
             <MacroBar label="Protein" unit="g" :value="nutrition.data.totals.protein" :goal="nutrition.data.goals.protein" :state="nutrition.data.status.protein.reached ? 'on' : 'under'" />
           </div>
+        </SystemPanel>
+
+        <SystemPanel title="Skills" icon="sparkles">
+          <SkillsPanel :skills="game.dashboard.skills" :total-level="game.dashboard.total_level" />
         </SystemPanel>
 
         <SystemPanel title="Quests cleared by tier">

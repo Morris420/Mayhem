@@ -27,6 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'me']);
 
     Route::get('/dashboard', [DashboardController::class, 'show']);
+    Route::get('/skills', [DashboardController::class, 'skills']);
     Route::get('/calendar', [CalendarController::class, 'show']);
 
     Route::get('/tasks', [TaskController::class, 'index']);

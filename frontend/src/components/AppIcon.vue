@@ -54,6 +54,9 @@ const paths = {
   list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
   more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
   move: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+  coins: '<ellipse cx="9" cy="7" rx="5" ry="3"/><path d="M4 7v5c0 1.7 2.2 3 5 3s5-1.3 5-3V7M14 10.5c2.8.2 5 1.4 5 3v4c0 1.7-2.2 3-5 3-1.6 0-3-.4-4-1"/>',
+  hammer: '<path d="M14 4l6 6-3 3-6-6 3-3zM12 8L4 16l4 4 8-8M3 21l3-3"/>',
   briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/>',
 }
 </script>

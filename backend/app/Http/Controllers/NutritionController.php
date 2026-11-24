@@ -22,6 +22,8 @@ class NutritionController extends Controller
 
     private ?array $unlocked = null;
 
+    private array $levelUps = [];
+
     public function index(Request $request): JsonResponse
     {
         return response()->json($this->payload($request, $this->date($request->query('date'))));
@@ -80,6 +82,7 @@ class NutritionController extends Controller
         ]);
 
         $this->unlocked = $engine->evaluate($user);
+        $this->levelUps = app(\App\Support\SkillService::class)->refresh($user);
 
         return response()->json($this->payload($request, $this->date($data['date'] ?? null)), 201);
     }
@@ -92,6 +95,7 @@ class NutritionController extends Controller
         $entry->update(['grams' => $data['grams']] + $this->macros($entry->kcal_100g, $entry->protein_100g, (float) $data['grams']));
 
         $this->unlocked = $engine->evaluate($request->user());
+        $this->levelUps = app(\App\Support\SkillService::class)->refresh($request->user());
 
         return response()->json($this->payload($request, $entry->date));
     }
@@ -144,6 +148,7 @@ class NutritionController extends Controller
         $entry = $request->user()->mealEntries()->findOrFail($entryId);
         $date = $entry->date;
         $entry->delete();
+        app(\App\Support\SkillService::class)->refresh($request->user());
 
         return response()->json($this->payload($request, $date));
     }
@@ -232,6 +237,7 @@ class NutritionController extends Controller
 
         return [
             'unlocked' => $this->unlocked ?? [],
+            'skill_level_ups' => $this->levelUps,
             'checklist' => $checklist,
             'extras' => ['done' => $checklist->where('done', true)->count(), 'total' => $checklist->count()],
             'date' => $date->toDateString(),

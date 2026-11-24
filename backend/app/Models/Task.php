@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  *  - dated     : `scheduled_date` is a single day
  *  - floating  : neither; a plain to-do that shows up on today's list until you finish it
  */
-#[Fillable(['user_id', 'achievement_id', 'title', 'description', 'tier', 'xp', 'recurrence', 'scheduled_date', 'starts_on'])]
+#[Fillable(['user_id', 'achievement_id', 'skill_id', 'title', 'description', 'tier', 'xp', 'recurrence', 'scheduled_date', 'starts_on'])]
 class Task extends Model
 {
     use SoftDeletes;
@@ -37,6 +37,11 @@ class Task extends Model
     public function achievement(): BelongsTo
     {
         return $this->belongsTo(Achievement::class);
+    }
+
+    public function skill(): BelongsTo
+    {
+        return $this->belongsTo(Skill::class);
     }
 
     public function completions(): HasMany

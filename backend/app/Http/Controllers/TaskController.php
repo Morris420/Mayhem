@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Http\Resources\TaskResource;
 use App\Http\Resources\UserResource;
 use App\Models\Task;
+use App\Models\Skill;
 use App\Support\Progression;
+use App\Support\SkillService;
 use App\Support\QuestPlanner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,7 +20,7 @@ class TaskController extends Controller
     public function index(Request $request)
     {
         $tasks = $request->user()->tasks()
-            ->with('achievement:id,name,icon')
+            ->with(['achievement:id,name,icon', 'skill:id,slug,name,icon'])
             ->withCount('completions')
             ->latest('id')
             ->get();
@@ -35,13 +37,14 @@ class TaskController extends Controller
             'description' => $data['description'] ?? null,
             'tier' => $data['tier'],
             'achievement_id' => $data['achievement_id'] ?? null,
+            'skill_id' => $data['skill_id'] ?? Skill::where('slug', 'discipline')->value('id'),
             // XP is decided here, never by the client, so it can't be tampered with.
             'xp' => Progression::TIER_XP[$data['tier']],
         ]);
 
         $this->applySchedule($task, $data['schedule'] ?? null);
 
-        return (new TaskResource($task->load('achievement:id,name,icon')->loadCount('completions')))
+        return (new TaskResource($task->load(['achievement:id,name,icon', 'skill:id,slug,name,icon'])->loadCount('completions')))
             ->response()->setStatusCode(201);
     }
 
@@ -56,6 +59,7 @@ class TaskController extends Controller
             'description' => $data['description'] ?? null,
             'tier' => $data['tier'],
             'achievement_id' => $data['achievement_id'] ?? null,
+            'skill_id' => $data['skill_id'] ?? Skill::where('slug', 'discipline')->value('id'),
             'xp' => Progression::TIER_XP[$data['tier']],
         ]);
 
@@ -63,7 +67,7 @@ class TaskController extends Controller
             $this->applySchedule($task, $data['schedule']);
         }
 
-        return new TaskResource($task->load('achievement:id,name,icon')->loadCount('completions'));
+        return new TaskResource($task->load(['achievement:id,name,icon', 'skill:id,slug,name,icon'])->loadCount('completions'));
     }
 
     /** Assign an existing quest to a date, to weekdays, or clear its schedule. */
@@ -74,14 +78,14 @@ class TaskController extends Controller
 
         $this->applySchedule($task, $data);
 
-        return new TaskResource($task->load('achievement:id,name,icon')->loadCount('completions'));
+        return new TaskResource($task->load(['achievement:id,name,icon', 'skill:id,slug,name,icon'])->loadCount('completions'));
     }
 
     /**
      * Finish a quest for today: award XP, then unlock its achievement once every
      * quest linked to that achievement has been completed at least once.
      */
-    public function complete(Request $request, int $taskId): JsonResponse
+    public function complete(Request $request, int $taskId, SkillService $skills): JsonResponse
     {
         $user = $request->user();
         $task = $user->tasks()->with('achievement')->findOrFail($taskId);
@@ -132,6 +136,8 @@ class TaskController extends Controller
             ];
         });
 
+        $result['skill_level_ups'] = $result['awarded'] ? $skills->refresh($user) : [];
+
         return response()->json([
             'task' => ['id' => $task->id, 'title' => $task->title, 'tier' => $task->tier, 'xp' => $task->xp],
             'user' => new UserResource($user->fresh()),
@@ -157,6 +163,7 @@ class TaskController extends Controller
             'title' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:1000'],
             'tier' => ['required', Rule::in(array_keys(Progression::TIER_XP))],
+            'skill_id' => ['nullable', 'integer', Rule::exists('skills', 'id')],
             'achievement_id' => ['nullable', 'integer', Rule::exists('achievements', 'id')
                 ->where(fn ($q) => $q->where(fn ($w) => $w->whereNull('user_id')->orWhere('user_id', $user->id))->whereNull('rule'))],
         ] + $this->scheduleRules('schedule.');

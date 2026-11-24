@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import SystemPanel from '@/components/SystemPanel.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import ScheduleEditor from '@/components/ScheduleEditor.vue'
 import AchievementGrid from '@/components/AchievementGrid.vue'
 import { useGameStore } from '@/stores/game'
 import { ApiError, describeError } from '@/lib/api'
+import { skillColor } from '@/lib/skills'
 import { TIERS, TIER_META, TIER_XP, describeSchedule } from '@/lib/tiers'
 
 const game = useGameStore()
@@ -15,7 +16,7 @@ const ICONS = ['trophy', 'medal', 'footprints', 'dumbbell', 'flame', 'sunrise', 
 // One creation window, two modes: a normal quest, or a major achievement.
 const mode = ref('quest') // 'quest' | 'achievement'
 
-const quest = reactive({ title: '', description: '', tier: 'C', achievementId: null })
+const quest = reactive({ title: '', description: '', tier: 'C', achievementId: null, skillId: null })
 const questSchedule = ref({ mode: 'none', days: [], date: '' })
 const ach = reactive({ name: '', description: '', icon: 'trophy', tier: 'B' })
 
@@ -52,6 +53,12 @@ const filtered = computed(() => {
 })
 // Gym/diet achievements unlock by themselves, so they can't be linked to a quest.
 const linkable = computed(() => game.catalog.filter((a) => !a.auto))
+// The skills come with the dashboard payload; default the picker to Discipline.
+const skills = computed(() => game.dashboard?.skills ?? [])
+watch(skills, (list) => {
+  if (quest.skillId === null && list.length) quest.skillId = (list.find((s) => s.slug === 'discipline') ?? list[0]).id
+}, { immediate: true })
+
 const customAchievements = computed(() => game.catalog.filter((a) => a.custom))
 
 async function submit() {
@@ -65,6 +72,7 @@ async function submit() {
         description: quest.description.trim() || null,
         tier: quest.tier,
         achievement_id: quest.achievementId,
+        skill_id: quest.skillId,
         schedule: schedulePayload(questSchedule.value),
       })
       quest.title = ''
@@ -157,6 +165,14 @@ onMounted(() => Promise.all([game.refreshAll(), game.loadCatalog()]).catch((e) =
           </fieldset>
 
           <div class="space-y-1.5">
+            <label for="skill" :class="labelClass">Trains skill</label>
+            <select id="skill" v-model="quest.skillId" :class="inputClass">
+              <option v-for="s in skills" :key="s.id" :value="s.id">{{ s.name }}</option>
+            </select>
+            <p class="text-xs text-slate-500">Finishing this quest adds its XP to this skill as well as to your hunter level.</p>
+          </div>
+
+          <div class="space-y-1.5">
             <label for="achievement" :class="labelClass">Counts towards an achievement <span class="text-slate-600">(optional)</span></label>
             <select id="achievement" v-model="quest.achievementId" :class="inputClass">
               <option :value="null">None</option>
@@ -227,6 +243,7 @@ onMounted(() => Promise.all([game.refreshAll(), game.loadCatalog()]).catch((e) =
                     <AppIcon :name="t.schedule.mode === 'weekly' ? 'repeat' : 'calendar'" class="h-3 w-3" /> {{ describeSchedule(t.schedule) }}
                   </span>
                   <span>+{{ t.xp }} XP</span>
+                  <span v-if="t.skill" :style="{ color: skillColor(t.skill.slug) }">{{ t.skill.name }}</span>
                   <span v-if="t.achievement" class="text-amber-300/80">★ {{ t.achievement.name }}</span>
                   <span v-if="t.times_completed">done {{ t.times_completed }}×</span>
                 </div>

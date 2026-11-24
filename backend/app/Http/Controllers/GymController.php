@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Exercise;
 use App\Models\ExerciseLog;
 use App\Support\AchievementEngine;
+use App\Support\SkillService;
 use App\Support\GymPlanner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -60,12 +61,16 @@ class GymController extends Controller
             ['user_id' => $request->user()->id, 'weight' => $data['weight'], 'sets' => $data['sets'] ?? null, 'reps' => $data['reps'] ?? null],
         );
 
-        return response()->json(['unlocked' => $engine->evaluate($request->user())] + $this->payload($request, $planner));
+        return response()->json([
+            'unlocked' => $engine->evaluate($request->user()),
+            'skill_level_ups' => app(SkillService::class)->refresh($request->user()),
+        ] + $this->payload($request, $planner));
     }
 
     public function destroyLog(Request $request, GymPlanner $planner, int $logId): JsonResponse
     {
         ExerciseLog::where('user_id', $request->user()->id)->findOrFail($logId)->delete();
+        app(SkillService::class)->refresh($request->user());
 
         return response()->json($this->payload($request, $planner));
     }

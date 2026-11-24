@@ -34,6 +34,7 @@ export const useGymStore = defineStore('gym', () => {
       toasts.push({ title: 'New personal record', message: `${exercise.name} · ${after.best} kg`, kind: 'achievement', icon: 'trophy', duration: 6000 })
     }
     toasts.announceUnlocked(data.value.unlocked)
+    toasts.announceSkills(data.value.skill_level_ups)
     if (data.value.physique.stage > before.stage) {
       toasts.push({ title: 'Physique evolved', message: `You are now ${data.value.physique.name}`, kind: 'level', icon: 'zap', duration: 7000 })
     }

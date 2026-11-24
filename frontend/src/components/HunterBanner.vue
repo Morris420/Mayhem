@@ -13,6 +13,7 @@ const props = defineProps({
   achievements: { type: Array, default: () => [] },
   gym: { type: Object, default: null }, // /api/gym payload (optional)
   dietStreak: { type: Number, default: 0 },
+  totalLevel: { type: Number, default: 0 },
 })
 
 const r = computed(() => rankInfo(props.user.rank))
@@ -106,10 +107,11 @@ function greeting() {
           <span class="ml-2 text-xs text-slate-500">{{ progress.next ? `${progress.levelsLeft} level${progress.levelsLeft === 1 ? '' : 's'} to ${progress.next.rank}-rank` : 'Top rank reached' }}</span>
         </div>
 
-        <dl class="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+        <dl class="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-5">
           <div class="flex items-center gap-2.5 rounded-lg bg-slate-800/60 px-3 py-2"><AppIcon name="flame" class="h-4 w-4 shrink-0 text-amber-400" /><div><dd class="leading-none font-bold text-white">{{ stats.streak }} day streak</dd><dt class="mt-0.5 text-[11px] text-slate-400">quests</dt></div></div>
           <div class="flex items-center gap-2.5 rounded-lg bg-slate-800/60 px-3 py-2"><AppIcon name="target" class="h-4 w-4 shrink-0 text-cyan-300" /><div><dd class="leading-none font-bold text-white">{{ stats.completions }}</dd><dt class="mt-0.5 text-[11px] text-slate-400">quests cleared</dt></div></div>
           <div class="flex items-center gap-2.5 rounded-lg bg-slate-800/60 px-3 py-2"><AppIcon name="dumbbell" class="h-4 w-4 shrink-0 text-emerald-300" /><div><dd class="leading-none font-bold text-white">{{ gym?.stats.sessions ?? 0 }}</dd><dt class="mt-0.5 text-[11px] text-slate-400">workouts{{ gym ? ' · ' + gym.physique.name : '' }}</dt></div></div>
+          <div class="flex items-center gap-2.5 rounded-lg bg-slate-800/60 px-3 py-2"><AppIcon name="sparkles" class="h-4 w-4 shrink-0 text-violet-300" /><div><dd class="leading-none font-bold text-white">{{ totalLevel }}</dd><dt class="mt-0.5 text-[11px] text-slate-400">total skill level</dt></div></div>
           <div class="flex items-center gap-2.5 rounded-lg bg-slate-800/60 px-3 py-2"><AppIcon name="utensils" class="h-4 w-4 shrink-0 text-lime-300" /><div><dd class="leading-none font-bold text-white">{{ dietStreak }}</dd><dt class="mt-0.5 text-[11px] text-slate-400">diet streak</dt></div></div>
         </dl>
       </div>

@@ -73,6 +73,7 @@ export const useGameStore = defineStore('game', () => {
     if (res.unlocked) {
       toasts.push({ title: 'Achievement unlocked', message: res.unlocked.name, kind: 'achievement', icon: res.unlocked.icon, duration: 7000 })
     }
+    toasts.announceSkills(res.skill_level_ups)
     await refreshAll()
   }
 

@@ -18,6 +18,8 @@ class TaskResource extends JsonResource
             'description' => $this->description,
             'tier' => $this->tier,
             'xp' => $this->xp,
+            'skill_id' => $this->skill_id,
+            'skill' => $this->whenLoaded('skill', fn () => $this->skill ? ['id' => $this->skill->id, 'slug' => $this->skill->slug, 'name' => $this->skill->name, 'icon' => $this->skill->icon] : null),
             'achievement_id' => $this->achievement_id,
             'achievement' => $this->whenLoaded('achievement', fn () => $this->achievement
                 ? ['id' => $this->achievement->id, 'name' => $this->achievement->name, 'icon' => $this->achievement->icon]

@@ -21,11 +21,13 @@ export const useNutritionStore = defineStore('nutrition', () => {
   async function addEntry(payload) {
     data.value = await api.post('/nutrition/entries', { ...payload, date: date.value })
     useToastStore().announceUnlocked(data.value.unlocked)
+    useToastStore().announceSkills(data.value.skill_level_ups)
   }
 
   async function updateEntry(id, grams) {
     data.value = await api.put(`/nutrition/entries/${id}`, { grams })
     useToastStore().announceUnlocked(data.value.unlocked)
+    useToastStore().announceSkills(data.value.skill_level_ups)
   }
 
   // Daily checklist: vitamins, fruit, vegetables... (extras, they don't change "goal hit")
