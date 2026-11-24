@@ -291,6 +291,40 @@ class CoachTest extends TestCase
         $this->assertSame(1, CoachMessage::count());
     }
 
+    public function test_the_dashboard_offers_the_days_best_suggestion(): void
+    {
+        $this->assertNull($this->getJson('/api/dashboard')->json('coach_suggestion'));
+
+        $this->ai->answer = ['reply' => 'ok', 'quests' => [
+            $this->quest(['title' => 'Small thing', 'tier' => 'E']),
+            $this->quest(['title' => 'Big thing', 'tier' => 'B']),
+            $this->quest(['title' => 'Middling thing', 'tier' => 'C']),
+        ]];
+        $this->postJson('/api/coach/messages', ['message' => 'go'])->assertOk();
+
+        $this->assertSame('Big thing', $this->getJson('/api/dashboard')->json('coach_suggestion.title'));
+
+        // once handled, the next best takes its place
+        $id = CoachProposal::where('title', 'Big thing')->value('id');
+        $this->postJson("/api/coach/proposals/$id/dismiss")->assertOk();
+        $this->assertSame('Middling thing', $this->getJson('/api/dashboard')->json('coach_suggestion.title'));
+
+        // yesterday's leftovers do not count
+        Carbon::setTestNow(Carbon::parse('2026-11-26 09:00:00', 'Europe/Amsterdam'));
+        $this->assertNull($this->getJson('/api/dashboard')->json('coach_suggestion'));
+    }
+
+    public function test_dismissed_suggestions_are_not_offered_again(): void
+    {
+        $this->ai->answer = ['reply' => 'ok', 'quests' => [$this->quest(['title' => 'Cold shower'])]];
+        $id = $this->postJson('/api/coach/messages', ['message' => 'go'])->json('messages.1.proposals.0.id');
+        $this->postJson("/api/coach/proposals/$id/dismiss")->assertOk();
+
+        $this->postJson('/api/coach/messages', ['message' => 'again'])->assertOk();
+        $this->assertStringContainsString('turned these suggestions down', $this->ai->system);
+        $this->assertStringContainsString('Cold shower', $this->ai->system);
+    }
+
     public function test_the_coach_is_private(): void
     {
         auth()->forgetGuards();

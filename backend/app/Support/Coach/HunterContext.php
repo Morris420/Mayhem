@@ -4,6 +4,7 @@ namespace App\Support\Coach;
 
 use App\Models\Achievement;
 use App\Models\BriefcaseItem;
+use App\Models\CoachProposal;
 use App\Models\ExerciseLog;
 use App\Models\Task;
 use App\Models\TaskCompletion;
@@ -76,7 +77,7 @@ class HunterContext
     {
         $tasks = $user->tasks()->with('skill:id,slug')->withCount('completions')->latest('id')->limit(60)->get();
         if ($tasks->isEmpty()) {
-            return "## Quest library\n(empty - they have no quests yet)";
+            return "## Quest library\n(empty - they have no quests yet)".$this->dismissed($user);
         }
 
         $last = TaskCompletion::where('user_id', $user->id)
@@ -95,7 +96,16 @@ class HunterContext
                 ."; done {$t->completions_count}x, last {$ago})";
         })->implode("\n");
 
-        return "## Quest library (do not propose one they already have)\n".$lines;
+        return "## Quest library (do not propose one they already have)\n".$lines.$this->dismissed($user);
+    }
+
+    /** Suggestions they said no to. Offering them again is the fastest way to be ignored. */
+    private function dismissed(User $user): string
+    {
+        $titles = CoachProposal::where('user_id', $user->id)->where('status', 'dismissed')
+            ->latest('id')->limit(15)->pluck('title');
+
+        return $titles->isEmpty() ? '' : "\n\nThey turned these suggestions down, so do not offer them again:\n- ".$titles->implode("\n- ");
     }
 
     private function week(User $user, Carbon $today): string

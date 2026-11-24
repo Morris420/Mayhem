@@ -4,12 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\UserResource;
 use App\Models\Achievement;
+use App\Models\CoachProposal;
 use App\Models\TaskCompletion;
 use App\Models\User;
 use App\Support\AchievementEngine;
 use App\Support\Progression;
-use App\Support\SkillService;
 use App\Support\QuestPlanner;
+use App\Support\SkillService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -44,6 +45,7 @@ class DashboardController extends Controller
                 'achievements_unlocked' => collect($achievements)->where('unlocked', true)->count(),
                 'achievements_total' => count($achievements),
             ],
+            'coach_suggestion' => $this->coachSuggestion($user),
             'skills' => $skills,
             'total_level' => $skillService->totalLevel($skills),
             'tiers' => $this->tiers($user),
@@ -58,6 +60,21 @@ class DashboardController extends Controller
         $skills = $skillService->overview($request->user());
 
         return response()->json(['skills' => $skills, 'total_level' => $skillService->totalLevel($skills)]);
+    }
+
+    /**
+     * The best quest the coach suggested today and you have not answered yet, so it can be
+     * accepted straight from the dashboard. Highest XP first, newest to break a tie.
+     */
+    private function coachSuggestion(User $user): ?array
+    {
+        $proposal = CoachProposal::where('user_id', $user->id)->where('status', 'pending')
+            ->whereDate('created_at', '>=', now()->startOfDay())
+            ->with('skill')->get()
+            ->sortByDesc(fn (CoachProposal $p) => (Progression::TIER_XP[$p->tier] ?? 0) * 100000 + $p->id)
+            ->first();
+
+        return $proposal?->present();
     }
 
     /** Completed quests + XP for each of the last N days (oldest first), zero-filled. */

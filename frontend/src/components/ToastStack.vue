@@ -9,6 +9,7 @@ const styles = {
   success: 'border-emerald-500/40 text-emerald-200',
   level: 'border-violet-400/50 text-violet-200',
   achievement: 'border-amber-400/50 text-amber-200',
+  error: 'border-red-500/50 text-red-200',
 }
 </script>
 

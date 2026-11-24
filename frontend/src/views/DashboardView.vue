@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import SystemPanel from '@/components/SystemPanel.vue'
 import HunterBanner from '@/components/HunterBanner.vue'
@@ -13,7 +13,10 @@ import AchievementGrid from '@/components/AchievementGrid.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import PhysiqueFigure from '@/components/PhysiqueFigure.vue'
 import { describeError } from '@/lib/api'
+import { skillColor } from '@/lib/skills'
+import { TIER_META, TIER_XP, describeSchedule } from '@/lib/tiers'
 import { useGameStore } from '@/stores/game'
+import { useCoachStore } from '@/stores/coach'
 import { useGymStore } from '@/stores/gym'
 import { useNutritionStore } from '@/stores/nutrition'
 import MacroBar from '@/components/MacroBar.vue'
@@ -23,7 +26,33 @@ const game = useGameStore()
 const gym = useGymStore()
 const nutrition = useNutritionStore()
 const toasts = useToastStore()
+const coach = useCoachStore()
 const busyId = ref(null)
+const acceptingId = ref(null)
+
+// The quest the coach suggested today that is worth the most XP, so it can be taken in one click.
+const suggestion = computed(() => game.dashboard?.coach_suggestion ?? null)
+
+async function acceptSuggestion() {
+  acceptingId.value = suggestion.value.id
+  try {
+    await coach.accept(suggestion.value.id) // refreshes the dashboard itself
+  } catch (e) {
+    toasts.push({ title: 'Could not accept', message: describeError(e), kind: 'error', icon: 'alert' })
+  }
+  acceptingId.value = null
+}
+
+async function dismissSuggestion() {
+  acceptingId.value = suggestion.value.id
+  try {
+    await coach.dismiss(suggestion.value.id)
+    await game.refreshAll()
+  } catch (e) {
+    toasts.push({ title: 'Could not dismiss', message: describeError(e), kind: 'error', icon: 'alert' })
+  }
+  acceptingId.value = null
+}
 const loadError = ref('')
 
 async function load() {
@@ -99,6 +128,33 @@ onMounted(() => {
               <div class="flex justify-between"><dt class="text-slate-400">Total completed</dt><dd class="font-semibold text-slate-100">{{ game.dashboard.stats.completions }}</dd></div>
               <div class="flex justify-between"><dt class="text-slate-400">Quests</dt><dd class="font-semibold text-slate-100">{{ game.dashboard.stats.quests }}</dd></div>
             </dl>
+          </div>
+        </SystemPanel>
+
+        <SystemPanel v-if="suggestion" title="From your coach" icon="sparkles" data-testid="coach-suggestion">
+          <template #aside><RouterLink :to="{ name: 'coach' }" class="text-xs text-slate-400 hover:text-white">All suggestions →</RouterLink></template>
+          <div>
+            <div class="flex items-center gap-3">
+              <div class="rounded-lg bg-violet-500/15 p-2.5 text-violet-300"><AppIcon name="scroll" class="h-5 w-5" /></div>
+              <div class="min-w-0">
+                <div class="truncate text-sm font-semibold text-slate-100">{{ suggestion.title }}</div>
+                <div class="truncate text-xs text-slate-400">{{ suggestion.reason || suggestion.description }}</div>
+              </div>
+            </div>
+            <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+              <span class="w-6 rounded py-0.5 text-center text-[11px] font-semibold" :class="TIER_META[suggestion.tier].badge">{{ suggestion.tier }}</span>
+              <span v-if="suggestion.skill" :style="{ color: skillColor(suggestion.skill.slug) }">{{ suggestion.skill.name }}</span>
+              <span class="flex items-center gap-1"><AppIcon :name="suggestion.schedule.mode === 'weekly' ? 'repeat' : 'calendar'" class="h-3 w-3" />{{ describeSchedule(suggestion.schedule) }}</span>
+              <span class="font-medium text-slate-300">+{{ TIER_XP[suggestion.tier] }} XP</span>
+            </div>
+            <div class="mt-3 flex gap-2">
+              <button type="button" :disabled="acceptingId === suggestion.id" class="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/60 bg-emerald-500/10 py-2 text-sm font-medium text-emerald-200 transition-colors hover:bg-emerald-500/20 disabled:opacity-50" @click="acceptSuggestion">
+                <AppIcon name="check" class="h-4 w-4" /> Accept quest
+              </button>
+              <button type="button" :disabled="acceptingId === suggestion.id" class="rounded-lg border border-slate-700 px-3 text-sm text-slate-400 transition-colors hover:border-slate-500 disabled:opacity-50" :aria-label="`Dismiss ${suggestion.title}`" @click="dismissSuggestion">
+                <AppIcon name="x" class="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </SystemPanel>
 
