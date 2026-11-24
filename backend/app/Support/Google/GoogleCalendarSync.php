@@ -9,6 +9,8 @@ use App\Models\User;
 use App\Support\QuestPlanner;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 /**
  * Two-way sync with Google Calendar.
@@ -28,12 +30,29 @@ class GoogleCalendarSync
 
     private const MAX_CREATES = 150;
 
+    private const MAX_LOOKUPS = 25;
+
     private array $errors = [];
 
     public function __construct(private GoogleClient $google, private QuestPlanner $planner) {}
 
     /** @return array{imported: int, created: int, updated: int, removed: int, moved: int, errors: list<string>} */
     public function run(User $user): array
+    {
+        // One sync per person at a time: two at once would both create the same event in Google.
+        $lock = Cache::lock("google-sync:{$user->id}", 120);
+        if (! $lock->get()) {
+            throw new GoogleException('A sync is already running. Give it a moment.', false, 409);
+        }
+
+        try {
+            return $this->runLocked($user);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function runLocked(User $user): array
     {
         $conn = $user->googleConnection;
         $this->errors = [];
@@ -120,7 +139,7 @@ class GoogleCalendarSync
     private function pullMayhemCalendar(GoogleConnection $conn, CarbonInterface $from, CarbonInterface $to): ?array
     {
         try {
-            return collect($this->listEvents($conn, $conn->mayhem_calendar_id, $from, $to))->keyBy('id')->all();
+            return collect($this->listEvents($conn, $conn->mayhem_calendar_id, $from, $to, true))->keyBy('id')->all();
         } catch (GoogleException $e) {
             if ($e->status === 404 || $e->status === 410) {
                 return null;
@@ -133,11 +152,22 @@ class GoogleCalendarSync
     private function applyChangesFromGoogle(User $user, array $events): int
     {
         $moved = 0;
+        $lookups = 0;
         $rows = GooglePushed::where('user_id', $user->id)->where('status', 'synced')
             ->whereDate('date', '>=', now()->startOfDay()->subDays(self::DAYS_BACK)->toDateString())->get();
 
         foreach ($rows as $row) {
             $ev = $events[$row->google_event_id] ?? null;
+            if (! $ev) {
+                // Not in the window we listed: it was moved out of it (or really deleted). Ask Google directly.
+                if ($lookups++ >= self::MAX_LOOKUPS) {
+                    continue; // the rest follows on the next sync
+                }
+                $ev = $this->fetchEvent($user, $row);
+                if ($ev === false) {
+                    continue; // could not tell: leave it alone
+                }
+            }
             if (! $ev || ($ev['status'] ?? '') === 'cancelled') {
                 $row->update(['status' => 'removed']);
 
@@ -158,7 +188,26 @@ class GoogleCalendarSync
         return $moved;
     }
 
-    private function listEvents(GoogleConnection $conn, string $calendarId, CarbonInterface $from, CarbonInterface $to): array
+    /** @return array|null|false the event, null if it is gone for good, false if Google could not tell us */
+    private function fetchEvent(User $user, GooglePushed $row): array|null|false
+    {
+        $conn = $user->googleConnection;
+        try {
+            return $this->google->call($conn, 'GET', '/calendars/'.rawurlencode($conn->mayhem_calendar_id).'/events/'.rawurlencode($row->google_event_id));
+        } catch (GoogleException $e) {
+            if (in_array($e->status, [404, 410], true)) {
+                return null;
+            }
+            if ($e->needsReconnect) {
+                throw $e;
+            }
+            $this->errors[] = $e->getMessage();
+
+            return false;
+        }
+    }
+
+    private function listEvents(GoogleConnection $conn, string $calendarId, CarbonInterface $from, CarbonInterface $to, bool $showDeleted = false): array
     {
         $out = [];
         $pageToken = null;
@@ -169,6 +218,7 @@ class GoogleCalendarSync
                 'timeMin' => $from->copy()->toRfc3339String(),
                 'timeMax' => $to->copy()->addDay()->toRfc3339String(),
                 'timeZone' => config('app.timezone'),
+                'showDeleted' => $showDeleted ? 'true' : null, // deleted events come back as status=cancelled
                 'maxResults' => 250,
                 'pageToken' => $pageToken,
             ]));
@@ -188,7 +238,7 @@ class GoogleCalendarSync
         if (($ev['status'] ?? '') === 'cancelled' || empty($ev['id'])) {
             return null;
         }
-        $title = trim($ev['summary'] ?? '') ?: '(no title)';
+        $title = Str::limit(trim($ev['summary'] ?? '') ?: '(no title)', 250, '…');
 
         if (isset($ev['start']['date'])) { // all-day: Google's end date is exclusive
             $start = $ev['start']['date'];

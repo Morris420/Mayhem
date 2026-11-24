@@ -64,13 +64,20 @@ async function disconnect() {
   emit('synced')
 }
 
+// The server only sends short codes; the wording lives here so a crafted link can't show its own text.
+const REASONS = {
+  expired: 'This sign-in link expired. Press Connect and try again.',
+  mismatch: 'That sign-in was not started in this browser. Press Connect here and try again.',
+  failed: 'Google sign-in failed. Please try again.',
+}
+
 onMounted(async () => {
   // Coming back from Google's sign-in page
   const flag = route.query.google
   if (flag) {
     router.replace({ query: {} })
     if (flag === 'denied') error.value = 'Google sign-in was cancelled.'
-    if (flag === 'error') error.value = route.query.reason || 'Google sign-in failed.'
+    if (flag === 'error') error.value = REASONS[route.query.reason] ?? REASONS.failed
   }
   try {
     await google.load()

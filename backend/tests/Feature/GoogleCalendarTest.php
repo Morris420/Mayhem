@@ -26,6 +26,9 @@ class GoogleCalendarTest extends TestCase
 
     private bool $mayhemGone = false;
 
+    /** Event ids that exist in Google but fall outside the list window (moved far away). */
+    private array $outsideWindow = [];
+
     private array $calls = [];
 
     private int $nextId = 1;
@@ -70,8 +73,13 @@ class GoogleCalendarTest extends TestCase
             if ($req->method() === 'GET' && str_contains($url, '/calendars/primary%40x.com/events')) {
                 return Http::response(['items' => $this->primaryEvents]);
             }
+            if ($req->method() === 'GET' && preg_match('#/calendars/mayhem%40group/events/([^/?]+)#', $url, $m)) {
+                return isset($this->mayhemEvents[$m[1]]) ? Http::response($this->mayhemEvents[$m[1]]) : Http::response(['error' => ['message' => 'Not Found']], 404);
+            }
             if ($req->method() === 'GET' && str_contains($url, '/calendars/mayhem%40group/events')) {
-                return $this->mayhemGone ? Http::response(['error' => ['message' => 'Not Found']], 404) : Http::response(['items' => array_values($this->mayhemEvents)]);
+                $listed = array_diff_key($this->mayhemEvents, array_flip($this->outsideWindow));
+
+                return $this->mayhemGone ? Http::response(['error' => ['message' => 'Not Found']], 404) : Http::response(['items' => array_values($listed)]);
             }
             if ($req->method() === 'POST' && str_contains($url, '/calendars/mayhem%40group/events')) {
                 $id = 'ev'.$this->nextId++;
@@ -114,7 +122,7 @@ class GoogleCalendarTest extends TestCase
         $this->app['auth']->forgetGuards();
 
         // the callback has no session: it is public and identified by the one-time state
-        $this->get('/api/google/callback?code=abc&state='.$q['state'])->assertRedirect('http://localhost:5173/calendar?google=connected');
+        $this->call('GET', '/api/google/callback', ['code' => 'abc', 'state' => $q['state']], ['google_oauth_state' => $q['state']])->assertRedirect('http://localhost:5173/calendar?google=connected');
 
         $conn = GoogleConnection::where('user_id', $this->user->id)->first();
         $this->assertSame('A', $conn->access_token);
@@ -125,7 +133,7 @@ class GoogleCalendarTest extends TestCase
 
     public function test_callback_rejects_unknown_state_and_denied(): void
     {
-        $this->get('/api/google/callback?code=abc&state=nope')->assertRedirectContains('google=error');
+        $this->call('GET', '/api/google/callback', ['code' => 'abc', 'state' => 'nope'], ['google_oauth_state' => 'nope'])->assertRedirect('http://localhost:5173/calendar?google=error&reason=expired');
         $this->get('/api/google/callback?error=access_denied')->assertRedirect('http://localhost:5173/calendar?google=denied');
     }
 
@@ -210,6 +218,50 @@ class GoogleCalendarTest extends TestCase
         $this->assertSame('2026-11-30', \App\Models\Task::find($id)->scheduled_date->toDateString());
         $this->assertSame('2026-11-30', GooglePushed::first()->date->toDateString());
         $this->assertSame(1, GooglePushed::count()); // not re-created on the old day
+    }
+
+    public function test_an_event_moved_far_away_still_moves_the_quest(): void
+    {
+        $this->connect();
+        $this->fakeGoogle();
+        $id = $this->postJson('/api/tasks', ['title' => 'Trip', 'tier' => 'E', 'schedule' => ['mode' => 'date', 'date' => '2026-11-26']])->json('data.id');
+        $this->sync()->assertOk();
+
+        // dragged 90 days out: no longer inside the window the list covers
+        $this->mayhemEvents['ev1']['start'] = ['date' => '2027-02-24'];
+        $this->mayhemEvents['ev1']['end'] = ['date' => '2027-02-25'];
+        $this->outsideWindow = ['ev1'];
+        $res = $this->sync()->assertOk();
+
+        $this->assertSame(1, $res->json('result.moved'));
+        $this->assertSame('2027-02-24', \App\Models\Task::find($id)->scheduled_date->toDateString());
+        $this->assertSame('synced', GooglePushed::first()->status);
+        $this->assertSame(1, GooglePushed::count());
+    }
+
+    public function test_a_second_sync_at_the_same_time_is_refused(): void
+    {
+        $this->connect();
+        $this->fakeGoogle();
+        $lock = Cache::lock('google-sync:'.$this->user->id, 120);
+        $this->assertTrue($lock->get());
+
+        $this->sync()->assertStatus(409);
+        $this->assertSame([], array_filter($this->calls, fn ($c) => str_starts_with($c, 'POST'))); // nothing was created
+
+        $lock->release();
+        $this->sync()->assertOk();
+    }
+
+    public function test_callback_needs_the_cookie_from_the_browser_that_started_sign_in(): void
+    {
+        $url = $this->getJson('/api/google/connect')->assertOk()->assertCookie('google_oauth_state')->json('url');
+        parse_str(parse_url($url, PHP_URL_QUERY), $q);
+        Http::fake(['oauth2.googleapis.com/token' => Http::response(['access_token' => 'A', 'refresh_token' => 'R', 'expires_in' => 3600])]);
+
+        // a victim opening the attacker's link has no matching cookie
+        $this->get('/api/google/callback?code=abc&state='.$q['state'])->assertRedirect('http://localhost:5173/calendar?google=error&reason=mismatch');
+        $this->assertNull(GoogleConnection::first());
     }
 
     public function test_events_deleted_in_google_are_not_recreated(): void

@@ -106,12 +106,16 @@ class TaskController extends Controller
 
             $levelBefore = Progression::levelForXp($user->xp);
 
-            $task->completions()->create([
-                'user_id' => $user->id,
-                'date' => $today->toDateString(),
-                'xp' => $task->xp,
-                'completed_at' => now(),
-            ]);
+            try {
+                $task->completions()->create([
+                    'user_id' => $user->id,
+                    'date' => $today->toDateString(),
+                    'xp' => $task->xp,
+                    'completed_at' => now(),
+                ]);
+            } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                return ['leveled_up' => false, 'unlocked' => null, 'awarded' => 0]; // a second click raced the first
+            }
             $user->increment('xp', $task->xp);
             $user->refresh();
 

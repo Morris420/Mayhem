@@ -27,9 +27,9 @@ class GoogleClient
     }
 
     /** The Google consent-screen address. `state` ties the callback to your account. */
-    public function authUrl(User $user): string
+    public function authUrl(User $user, ?string $state = null): string
     {
-        $state = Str::random(40);
+        $state ??= Str::random(40);
         Cache::put("google-oauth:$state", $user->id, now()->addMinutes(10));
 
         return self::AUTH_URL.'?'.http_build_query([
@@ -45,12 +45,18 @@ class GoogleClient
     }
 
     /** Called from the redirect Google sends you back to. */
-    public function connect(string $code, string $state): User
+    public function connect(string $code, string $state, ?string $browserState = null): User
     {
+        // The sign-in must finish in the same browser that started it, otherwise someone could
+        // send you their own link and get your calendar attached to their account.
+        if (! $browserState || ! hash_equals($state, $browserState)) {
+            throw new GoogleException('This sign-in was not started in this browser. Start the connection again.', false, 0, 'mismatch');
+        }
+
         $userId = Cache::pull("google-oauth:$state");
         $user = $userId ? User::find($userId) : null;
         if (! $user) {
-            throw new GoogleException('This sign-in link expired. Start the connection again.');
+            throw new GoogleException('This sign-in link expired. Start the connection again.', false, 0, 'expired');
         }
 
         $res = $this->http()->asForm()->post(self::TOKEN_URL, [
