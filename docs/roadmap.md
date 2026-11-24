@@ -36,12 +36,17 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
 - Weekly System report, daily reflection note in the day journal, JSON export/backup, rest-day-aware streaks, PWA install, polish.
 - Deployment decision (needed before Briefcase holds real finances and before PvP).
 
+## Next session: the arena combat game
+- Full plan, engine comparison, combat maths and milestones: docs/arena-design.md. Read it first.
+- Blocker: this container cannot install npm packages. Turn on network access for package installs and start a NEW chat.
+- First three answers needed: engine (three.js recommended, Unity if the CV matters more), real-time vs turn-based, code-built neon figures vs Mixamo.
+
 ## Later: arena combat game
 - Combat stats computed server-side from skills (Strength attack, Stamina HP, Discipline defense, Intellect ability power, Faith healing/resist, Affection support, Fortune crit/loot, Craft gear).
 - Three.js arena, turn-based boss fights first, then PvP over WebSockets (Laravel Reverb).
 
 ## Open items
-- Coach: untested against the real Gemini API (sandbox has no internet); verified with a local OpenAI-format stub.
+- Coach: working for real on his Gemini key (Nov 25). Dashboard shows the day's best suggestion; dismissed ones are not offered again.
 - Google Calendar sync: first real test pending (needs his Google account added as a test user).
 - Punishment mechanic: penalty quests, not XP loss (undecided).
 
