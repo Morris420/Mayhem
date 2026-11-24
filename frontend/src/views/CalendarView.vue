@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import BodyPartIcon from '@/components/BodyPartIcon.vue'
 import DayDetail from '@/components/DayDetail.vue'
+import GooglePanel from '@/components/GooglePanel.vue'
 import { api, describeError } from '@/lib/api'
 import { useGameStore } from '@/stores/game'
 import { useToastStore } from '@/stores/toasts'
@@ -110,6 +111,13 @@ onMounted(load)
           <span class="ml-auto font-medium">{{ d.workout.trained ? 'Trained' : 'Workout' }}</span>
         </RouterLink>
 
+        <ul v-if="d.events?.length" class="mb-2 space-y-1" aria-label="Google Calendar events">
+          <li v-for="ev in d.events" :key="ev.id" class="flex items-start gap-1.5 rounded-md border-l-2 border-sky-400/70 bg-sky-400/5 px-2 py-1 text-[11px] leading-snug text-sky-100" :title="ev.calendar">
+            <span v-if="ev.start_time" class="shrink-0 font-medium text-sky-300 tabular-nums">{{ ev.start_time }}</span>
+            <span class="min-w-0 break-words">{{ ev.title }}</span>
+          </li>
+        </ul>
+
         <ul class="flex-1 space-y-1.5">
           <li v-for="it in d.items" :key="it.task_id" class="rounded-lg border p-2 text-xs" :class="it.done ? 'border-transparent bg-slate-800/40' : 'border-slate-700 bg-slate-900'">
             <div class="flex items-start gap-2">
@@ -132,12 +140,14 @@ onMounted(load)
           </li>
         </ul>
 
-        <p v-if="!d.items.length && !d.workout && !d.diet" class="mt-auto pt-4 text-center text-xs text-slate-600">Nothing planned</p>
+        <p v-if="!d.items.length && !d.workout && !d.diet && !d.events?.length" class="mt-auto pt-4 text-center text-xs text-slate-600">Nothing planned</p>
       </section>
     </div>
 
+    <GooglePanel @synced="load" />
+
     <DayDetail v-if="openDay" :date="openDay" @close="openDay = null" />
 
-    <p class="text-xs text-slate-500">Click a date to open its journal. Schedule quests from the Quests page. Google Calendar events will appear here in a later update.</p>
+    <p class="text-xs text-slate-500">Click a date to open its journal. Schedule quests from the Quests page.</p>
   </div>
 </template>

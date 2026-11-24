@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ChecklistCheck;
 use App\Models\ExerciseLog;
+use App\Models\GoogleEvent;
 use App\Models\MealEntry;
 use App\Support\DietRules;
 use App\Support\QuestPlanner;
@@ -61,7 +62,9 @@ class DayController extends Controller
                 'foods' => $entries->map(fn ($e) => ['name' => $e->name, 'grams' => $e->grams, 'kcal' => (int) round($e->kcal)])->values(),
             ],
             'achievements' => $unlocked,
-            'events' => [], // Google Calendar events will land here
+            'events' => GoogleEvent::where('user_id', $user->id)->whereDate('start_date', '<=', $date)->whereDate('end_date', '>=', $date)
+                ->orderByRaw('start_time is null desc')->orderBy('start_time')->get()->map->present()->values(),
+            'google_connected' => $user->googleConnection()->exists(),
         ]);
     }
 }

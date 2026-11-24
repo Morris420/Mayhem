@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DayController;
+use App\Http\Controllers\GoogleController;
 use App\Http\Controllers\GymController;
 use App\Http\Controllers\NutritionController;
 use App\Http\Controllers\TaskController;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\Route;
 // --- Public -----------------------------------------------------------------
 Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+// Google redirects the browser here (no session); the one-time `state` token proves who started it.
+Route::get('/google/callback', [GoogleController::class, 'callback']);
 
 // --- Authenticated (Sanctum SPA session) -------------------------------------
 Route::middleware('auth:sanctum')->group(function () {
@@ -46,6 +49,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/nutrition/checklist', [NutritionController::class, 'addChecklist']);
     Route::put('/nutrition/checklist/{item}', [NutritionController::class, 'check']);
     Route::delete('/nutrition/checklist/{item}', [NutritionController::class, 'removeChecklist']);
+
+    Route::get('/google', [GoogleController::class, 'status']);
+    Route::get('/google/connect', [GoogleController::class, 'connect']);
+    Route::post('/google/sync', [GoogleController::class, 'sync'])->middleware('throttle:12,1');
+    Route::put('/google/settings', [GoogleController::class, 'settings']);
+    Route::delete('/google', [GoogleController::class, 'disconnect']);
 
     Route::get('/days/{date}', [DayController::class, 'show']);
 

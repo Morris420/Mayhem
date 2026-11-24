@@ -10,6 +10,7 @@ import { useAuthStore } from './stores/auth'
 import { useGameStore } from './stores/game'
 import { useGymStore } from './stores/gym'
 import { useNutritionStore } from './stores/nutrition'
+import { useGoogleStore } from './stores/google'
 
 const app = createApp(App)
 
@@ -23,6 +24,7 @@ setUnauthorizedHandler(() => {
   useGameStore().reset()
   useGymStore().reset()
   useNutritionStore().reset()
+  useGoogleStore().reset()
   if (router.currentRoute.value.name !== 'login') {
     router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
   }

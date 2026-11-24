@@ -32,7 +32,7 @@ const kcalText = computed(() => {
 })
 const empty = computed(() => {
   const d = day.value
-  return d && !d.quests.items.length && !d.gym.trained && !d.gym.planned.length && !d.diet.logged && !d.achievements.length
+  return d && !d.quests.items.length && !d.gym.trained && !d.gym.planned.length && !d.diet.logged && !d.achievements.length && !d.events.length
 })
 
 function onKey(e) {
@@ -116,7 +116,14 @@ watch(() => props.date, load)
 
         <section aria-label="Calendar events">
           <h3 class="mb-2 text-xs font-semibold tracking-wide text-slate-400 uppercase">Calendar events</h3>
-          <p class="rounded-lg border border-dashed border-slate-800 px-3 py-2 text-xs text-slate-500">Google Calendar isn't connected yet.</p>
+          <ul v-if="day.events.length" class="space-y-1.5">
+            <li v-for="ev in day.events" :key="ev.id" class="flex items-start gap-2.5 rounded-lg border-l-2 border-sky-400/70 bg-sky-400/5 px-3 py-2 text-sm text-sky-100">
+              <span class="w-20 shrink-0 text-xs text-sky-300 tabular-nums">{{ ev.all_day ? 'All day' : ev.start_time + (ev.end_time ? '–' + ev.end_time : '') }}</span>
+              <span class="min-w-0 flex-1 break-words">{{ ev.title }}<span v-if="ev.calendar" class="block text-xs text-slate-500">{{ ev.calendar }}</span></span>
+            </li>
+          </ul>
+          <p v-else-if="day.google_connected" class="rounded-lg border border-dashed border-slate-800 px-3 py-2 text-xs text-slate-500">Nothing in Google Calendar that day.</p>
+          <p v-else class="rounded-lg border border-dashed border-slate-800 px-3 py-2 text-xs text-slate-500">Google Calendar isn't connected yet. Connect it on the Calendar page.</p>
         </section>
       </div>
     </aside>

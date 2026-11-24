@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\GoogleEvent;
 use App\Support\DietRules;
 use App\Support\GymPlanner;
 use App\Support\QuestPlanner;
@@ -34,7 +35,13 @@ class CalendarController extends Controller
             ->groupBy(fn ($a) => Carbon::parse($a->pivot->unlocked_at)->timezone(config('app.timezone'))->toDateString())
             ->map->count();
 
+        $events = GoogleEvent::where('user_id', $user->id)
+            ->whereDate('start_date', '<=', $end->toDateString())->whereDate('end_date', '>=', $start->toDateString())
+            ->orderByRaw('start_time is null desc')->orderBy('start_time')->get();
+
         foreach ($list as &$day) {
+            $day['events'] = $events->filter(fn ($e) => $e->start_date->toDateString() <= $day['date'] && $e->end_date->toDateString() >= $day['date'])
+                ->map->present()->values()->all();
             $t = $diet->get($day['date']);
             $day['diet'] = $t ? ['logged' => true, 'kcal' => (int) round($t['kcal']), 'protein' => (int) round($t['protein']), 'ok' => $t['ok']] : null;
             $day['achievements'] = (int) $unlockedByDay->get($day['date'], 0);
