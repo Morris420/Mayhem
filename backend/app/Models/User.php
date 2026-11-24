@@ -44,6 +44,11 @@ class User extends Authenticatable
         ];
     }
 
+    public function briefcaseItems(): HasMany
+    {
+        return $this->hasMany(BriefcaseItem::class);
+    }
+
     public function googleConnection(): HasOne
     {
         return $this->hasOne(GoogleConnection::class);

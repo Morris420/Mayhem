@@ -35,7 +35,8 @@ async function request(method, path, body, { retry = true } = {}) {
   if (isWrite && !xsrfToken()) await refreshCsrf()
 
   const headers = { Accept: 'application/json' }
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData
+  if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json' // forms set their own (with the boundary)
   const token = xsrfToken()
   if (token) headers['X-XSRF-TOKEN'] = token
 
@@ -43,7 +44,7 @@ async function request(method, path, body, { retry = true } = {}) {
     method,
     headers,
     credentials: 'include',
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
   })
 
   // 419 = CSRF token expired/mismatch: fetch a fresh cookie and try once more.

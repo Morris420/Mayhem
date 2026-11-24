@@ -17,6 +17,7 @@ const router = createRouter({
         { path: 'calendar', name: 'calendar', component: () => import('@/views/CalendarView.vue') },
         { path: 'nutrition', name: 'nutrition', component: () => import('@/views/NutritionView.vue') },
         { path: 'gym', name: 'gym', component: () => import('@/views/GymView.vue') },
+        { path: 'briefcase', name: 'briefcase', component: () => import('@/views/BriefcaseView.vue') },
         { path: 'quests', name: 'quests', component: () => import('@/views/QuestBuilderView.vue') },
       ],
     },

@@ -17,6 +17,7 @@ class GoogleEvent extends Model
     {
         return [
             'id' => $this->id, 'title' => $this->title, 'calendar' => $this->calendar_name,
+            'start_date' => $this->start_date->toDateString(), 'end_date' => $this->end_date->toDateString(),
             'start_time' => $this->start_time, 'end_time' => $this->end_time,
             'all_day' => $this->start_time === null, 'link' => $this->link,
         ];

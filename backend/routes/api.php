@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AchievementController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BriefcaseController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DayController;
@@ -49,6 +50,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/nutrition/checklist', [NutritionController::class, 'addChecklist']);
     Route::put('/nutrition/checklist/{item}', [NutritionController::class, 'check']);
     Route::delete('/nutrition/checklist/{item}', [NutritionController::class, 'removeChecklist']);
+
+    Route::get('/briefcase', [BriefcaseController::class, 'index']);
+    Route::post('/briefcase/folders', [BriefcaseController::class, 'folder']);
+    Route::post('/briefcase/links', [BriefcaseController::class, 'link']);
+    Route::post('/briefcase/files', [BriefcaseController::class, 'upload']);
+    Route::get('/briefcase/{item}/file', [BriefcaseController::class, 'file']);
+    Route::post('/briefcase/{item}/replace', [BriefcaseController::class, 'replace']);
+    Route::put('/briefcase/{item}', [BriefcaseController::class, 'update']);
+    Route::delete('/briefcase/{item}', [BriefcaseController::class, 'destroy']);
 
     Route::get('/google', [GoogleController::class, 'status']);
     Route::get('/google/connect', [GoogleController::class, 'connect']);
