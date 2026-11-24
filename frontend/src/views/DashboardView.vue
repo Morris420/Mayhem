@@ -73,7 +73,7 @@ onMounted(() => {
       <div class="space-y-5 lg:col-span-8">
         <SystemPanel title="Today" icon="target">
           <template #aside>
-            <RouterLink :to="{ name: 'calendar' }" class="text-xs text-slate-400 hover:text-white">Open calendar →</RouterLink>
+            <RouterLink :to="{ name: 'coach' }" class="text-xs text-slate-400 hover:text-white">Ask the coach →</RouterLink>
           </template>
           <TodayList :pending="game.pendingToday" :done="game.doneToday" :busy-id="busyId" @complete="complete" />
         </SystemPanel>

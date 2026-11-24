@@ -49,6 +49,29 @@ class Task extends Model
         return $this->hasMany(TaskCompletion::class);
     }
 
+    /** Apply a schedule payload: ['mode' => 'none'|'date'|'weekly', 'days' => [1..7], 'date' => 'Y-m-d']. */
+    public function applySchedule(?array $schedule): void
+    {
+        if ($schedule === null) {
+            return;
+        }
+
+        $wasRecurring = $this->isRecurring();
+
+        match ($schedule['mode']) {
+            'weekly' => $this->forceFill([
+                'recurrence' => collect($schedule['days'])->map(fn ($d) => (int) $d)->unique()->sort()->values()->all(),
+                'scheduled_date' => null,
+                // keep the original start when only the weekdays change
+                'starts_on' => $wasRecurring ? $this->starts_on : now()->startOfDay(),
+            ]),
+            'date' => $this->forceFill(['recurrence' => null, 'scheduled_date' => $schedule['date'], 'starts_on' => null]),
+            default => $this->forceFill(['recurrence' => null, 'scheduled_date' => null, 'starts_on' => null]),
+        };
+
+        $this->save();
+    }
+
     public function isRecurring(): bool
     {
         return ! empty($this->recurrence);

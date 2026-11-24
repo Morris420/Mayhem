@@ -42,7 +42,7 @@ class TaskController extends Controller
             'xp' => Progression::TIER_XP[$data['tier']],
         ]);
 
-        $this->applySchedule($task, $data['schedule'] ?? null);
+        $task->applySchedule($data['schedule'] ?? null);
 
         return (new TaskResource($task->load(['achievement:id,name,icon', 'skill:id,slug,name,icon'])->loadCount('completions')))
             ->response()->setStatusCode(201);
@@ -64,7 +64,7 @@ class TaskController extends Controller
         ]);
 
         if (array_key_exists('schedule', $data)) {
-            $this->applySchedule($task, $data['schedule']);
+            $task->applySchedule($data['schedule']);
         }
 
         return new TaskResource($task->load(['achievement:id,name,icon', 'skill:id,slug,name,icon'])->loadCount('completions'));
@@ -76,7 +76,7 @@ class TaskController extends Controller
         $task = $request->user()->tasks()->findOrFail($taskId);
         $data = $request->validate($this->scheduleRules('') + ['mode' => ['required']]);
 
-        $this->applySchedule($task, $data);
+        $task->applySchedule($data);
 
         return new TaskResource($task->load(['achievement:id,name,icon', 'skill:id,slug,name,icon'])->loadCount('completions'));
     }
@@ -186,25 +186,5 @@ class TaskController extends Controller
         return $prefix ? ['schedule' => ['nullable', 'array']] + $rules : $rules;
     }
 
-    private function applySchedule(Task $task, ?array $schedule): void
-    {
-        if ($schedule === null) {
-            return;
-        }
 
-        $wasRecurring = $task->isRecurring();
-
-        match ($schedule['mode']) {
-            'weekly' => $task->forceFill([
-                'recurrence' => collect($schedule['days'])->map(fn ($d) => (int) $d)->unique()->sort()->values()->all(),
-                'scheduled_date' => null,
-                // keep the original start when only the weekdays change
-                'starts_on' => $wasRecurring ? $task->starts_on : now()->startOfDay(),
-            ]),
-            'date' => $task->forceFill(['recurrence' => null, 'scheduled_date' => $schedule['date'], 'starts_on' => null]),
-            default => $task->forceFill(['recurrence' => null, 'scheduled_date' => null, 'starts_on' => null]),
-        };
-
-        $task->save();
-    }
 }

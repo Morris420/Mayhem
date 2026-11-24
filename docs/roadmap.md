@@ -13,7 +13,10 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
 - Skills list on dashboard; level-up toasts per skill.
 - Skills (9): Strength, Stamina, Discipline, Intellect, Literacy, Faith, Affection, Fortune (money), Craft (building/career).
 
-## Session 2: AI quest coach
+## Session 2: AI quest coach (DONE)
+- Provider: Gemini free tier by default (GEMINI_API_KEY), or anything OpenAI-compatible (OpenRouter/Groq/Ollama). See docs/ai-coach-setup.md.
+- Add a provider: implement App\Support\Coach\CoachProvider and add it to the match in AppServiceProvider.
+- Caps: COACH_DAILY_MESSAGES (25) and COACH_DAILY_QUESTS (10) per person per day.
 - Hunter profile (big text: goals, status, how to be challenged) stored in the database.
 - Chat that only creates quests: model returns structured quest proposals, you accept or reject.
 - Daily generation (lazy on first open of the day), hard cap on messages/quests per day.
@@ -38,6 +41,7 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
 - Three.js arena, turn-based boss fights first, then PvP over WebSockets (Laravel Reverb).
 
 ## Open items
+- Coach: untested against the real Gemini API (sandbox has no internet); verified with a local OpenAI-format stub.
 - Google Calendar sync: first real test pending (needs his Google account added as a test user).
 - Punishment mechanic: penalty quests, not XP loss (undecided).
 

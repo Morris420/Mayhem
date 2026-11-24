@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useGameStore } from '@/stores/game'
 import { useGymStore } from '@/stores/gym'
 import { useNutritionStore } from '@/stores/nutrition'
+import { useCoachStore } from '@/stores/coach'
 
 // The frame around every logged-in page: top navigation + logout.
 const auth = useAuthStore()
@@ -19,6 +20,7 @@ const links = [
   { name: 'gym', label: 'Gym', icon: 'dumbbell' },
   { name: 'nutrition', label: 'Nutrition', icon: 'utensils' },
   { name: 'briefcase', label: 'Briefcase', icon: 'briefcase' },
+  { name: 'coach', label: 'Coach', icon: 'sparkles' },
 ]
 
 async function logout() {
@@ -26,6 +28,7 @@ async function logout() {
   game.reset()
   useGymStore().reset()
   useNutritionStore().reset()
+  useCoachStore().reset()
   router.push({ name: 'login' })
 }
 </script>
@@ -40,7 +43,7 @@ async function logout() {
             v-for="l in links"
             :key="l.name"
             :to="{ name: l.name }"
-            class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-400 sm:px-3 transition-colors hover:bg-slate-800 hover:text-slate-100"
+            class="flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-sm font-medium text-slate-400 sm:px-3 transition-colors hover:bg-slate-800 hover:text-slate-100"
             active-class="!bg-slate-800 !text-white"
           >
             <AppIcon :name="l.icon" class="h-4 w-4" />

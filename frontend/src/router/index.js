@@ -18,6 +18,7 @@ const router = createRouter({
         { path: 'nutrition', name: 'nutrition', component: () => import('@/views/NutritionView.vue') },
         { path: 'gym', name: 'gym', component: () => import('@/views/GymView.vue') },
         { path: 'briefcase', name: 'briefcase', component: () => import('@/views/BriefcaseView.vue') },
+        { path: 'coach', name: 'coach', component: () => import('@/views/CoachView.vue') },
         { path: 'quests', name: 'quests', component: () => import('@/views/QuestBuilderView.vue') },
       ],
     },

@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\ExerciseLog;
 use App\Models\Skill;
 use App\Models\User;
 use App\Support\SkillCurve;
+use Database\Seeders\SkillSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -19,7 +21,7 @@ class SkillsTest extends TestCase
     {
         parent::setUp();
         Carbon::setTestNow(Carbon::parse('2026-11-23 12:00:00'));
-        $this->seed(\Database\Seeders\SkillSeeder::class);
+        $this->seed(SkillSeeder::class);
         $this->user = User::factory()->create(['kcal_goal' => 3200, 'protein_goal' => 190]);
         $this->actingAs($this->user)->withHeaders(['Origin' => 'http://localhost:5173', 'Accept' => 'application/json']);
     }
@@ -77,7 +79,7 @@ class SkillsTest extends TestCase
         $this->assertSame(30, $this->skill('strength')['xp']);
 
         $this->postJson("/api/gym/exercises/$ex/logs", ['weight' => 65, 'date' => '2026-11-21'])->assertOk();
-        $log = \App\Models\ExerciseLog::where('date', '2026-11-21')->value('id');
+        $log = ExerciseLog::where('date', '2026-11-21')->value('id');
         $this->assertSame(30 + 30 + 15, $this->skill('strength')['xp']); // 2 days + 1 record
 
         $this->assertNotNull($log);

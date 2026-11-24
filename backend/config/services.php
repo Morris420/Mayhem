@@ -35,6 +35,25 @@ return [
         ],
     ],
 
+    // The AI quest coach. See docs/ai-coach-setup.md.
+    'coach' => [
+        'provider' => env('COACH_PROVIDER', 'gemini'), // gemini | openai
+        'daily_messages' => env('COACH_DAILY_MESSAGES', 25),
+        'daily_quests' => env('COACH_DAILY_QUESTS', 10),
+    ],
+
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-3.1-flash-lite'),
+    ],
+
+    // Anything that speaks the OpenAI chat format (OpenRouter, Groq, Ollama, LM Studio, OpenAI).
+    'openai_compatible' => [
+        'base_url' => env('OPENAI_BASE_URL', 'https://openrouter.ai/api/v1'),
+        'key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL'),
+    ],
+
     // Google Calendar sync. See README "Google Calendar" for the setup steps.
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),

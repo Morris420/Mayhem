@@ -4,6 +4,7 @@ use App\Http\Controllers\AchievementController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BriefcaseController;
 use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\CoachController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DayController;
 use App\Http\Controllers\GoogleController;
@@ -70,6 +71,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/google/sync', [GoogleController::class, 'sync'])->middleware('throttle:12,1');
     Route::put('/google/settings', [GoogleController::class, 'settings']);
     Route::delete('/google', [GoogleController::class, 'disconnect']);
+
+    Route::get('/coach', [CoachController::class, 'index']);
+    Route::put('/coach/profile', [CoachController::class, 'profile']);
+    Route::post('/coach/messages', [CoachController::class, 'message'])->middleware('throttle:20,1');
+    Route::post('/coach/daily', [CoachController::class, 'daily'])->middleware('throttle:20,1');
+    Route::post('/coach/proposals/{proposal}/accept', [CoachController::class, 'accept']);
+    Route::post('/coach/proposals/{proposal}/dismiss', [CoachController::class, 'dismiss']);
+    Route::delete('/coach', [CoachController::class, 'clear']);
 
     Route::get('/days/{date}', [DayController::class, 'show']);
 
