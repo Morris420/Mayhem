@@ -18,6 +18,9 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10
 // Google redirects the browser here (no session); the one-time `state` token proves who started it.
 Route::get('/google/callback', [GoogleController::class, 'callback']);
 
+// Office apps fetch this with a short-lived signature instead of a login (see BriefcaseController::openLink).
+Route::get('/briefcase/open/{item}/{filename}', [BriefcaseController::class, 'openSigned'])->middleware('signed')->name('briefcase.open');
+
 // --- Authenticated (Sanctum SPA session) -------------------------------------
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -55,6 +58,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/briefcase/folders', [BriefcaseController::class, 'folder']);
     Route::post('/briefcase/links', [BriefcaseController::class, 'link']);
     Route::post('/briefcase/files', [BriefcaseController::class, 'upload']);
+    Route::get('/briefcase/{item}/open-link', [BriefcaseController::class, 'openLink']);
     Route::get('/briefcase/{item}/file', [BriefcaseController::class, 'file']);
     Route::post('/briefcase/{item}/replace', [BriefcaseController::class, 'replace']);
     Route::put('/briefcase/{item}', [BriefcaseController::class, 'update']);

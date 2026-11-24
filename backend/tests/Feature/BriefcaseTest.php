@@ -171,11 +171,38 @@ class BriefcaseTest extends TestCase
         $this->getJson("/api/briefcase?folder=$folder")->assertNotFound();
     }
 
+    public function test_office_apps_get_a_signed_short_lived_address(): void
+    {
+        $this->upload('Budget 2026.xlsx');
+        $item = BriefcaseItem::first();
+
+        $url = $this->getJson("/api/briefcase/{$item->id}/open-link")->assertOk()->json('url');
+        $this->assertStringEndsWith('.xlsx', parse_url($url, PHP_URL_PATH));
+        $this->assertStringContainsString('signature=', $url);
+
+        // the Office app has no login: the signature is the key
+        auth()->forgetGuards();
+        $this->app['auth']->forgetGuards();
+        $this->get($url)->assertOk();
+        $this->get(preg_replace('/signature=[^&]+/', 'signature=nope', $url))->assertStatus(403);
+        $this->get("/api/briefcase/open/{$item->id}/x.xlsx")->assertStatus(403);
+
+        $this->travel(11)->minutes();
+        $this->get($url)->assertStatus(403); // expired
+    }
+
+    public function test_open_link_is_only_for_your_own_files(): void
+    {
+        $this->upload('secret.xlsx');
+        $item = BriefcaseItem::first();
+        $this->actingAs(User::factory()->create())->getJson("/api/briefcase/{$item->id}/open-link")->assertNotFound();
+    }
+
     public function test_login_is_required(): void
     {
         auth()->forgetGuards();
         $this->app['auth']->forgetGuards();
         $this->withoutMiddleware(); // keep it simple: just confirm the route group is behind auth
-        $this->assertTrue(collect(app('router')->getRoutes()->getRoutes())->filter(fn ($r) => str_starts_with($r->uri, 'api/briefcase'))->every(fn ($r) => in_array('auth:sanctum', $r->gatherMiddleware())));
+        $this->assertTrue(collect(app('router')->getRoutes()->getRoutes())->filter(fn ($r) => str_starts_with($r->uri, 'api/briefcase') && ! str_starts_with($r->uri, 'api/briefcase/open/'))->every(fn ($r) => in_array('auth:sanctum', $r->gatherMiddleware())));
     }
 }

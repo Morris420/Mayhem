@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -151,6 +152,30 @@ class BriefcaseController extends Controller
         ], $inline ? 'inline' : 'attachment');
     }
 
+    /**
+     * A short-lived address your Office app can fetch directly (it has no browser login).
+     * Used by "Open in Excel/Word": the app opens it through ms-excel:ofe|u|<this address>.
+     */
+    public function openLink(Request $request, int $itemId): JsonResponse
+    {
+        $item = $request->user()->briefcaseItems()->where('kind', 'file')->findOrFail($itemId);
+
+        return response()->json(['url' => URL::temporarySignedRoute('briefcase.open', now()->addMinutes(10), ['item' => $item->id, 'filename' => $this->downloadName($item, true)])]);
+    }
+
+    /** Reached only with a valid signature (see the `signed` middleware in routes). */
+    public function openSigned(int $itemId): StreamedResponse
+    {
+        $item = BriefcaseItem::where('kind', 'file')->findOrFail($itemId);
+        abort_unless($item->path && $this->disk()->exists($item->path), 404);
+
+        return $this->disk()->response($item->path, $this->downloadName($item), [
+            'Content-Type' => BriefcaseItem::TYPES[$item->extension] ?? 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+        ], 'attachment');
+    }
+
     // ---------------------------------------------------------------------
 
     private function store(User $user, UploadedFile $file, ?int $parent): void
@@ -200,9 +225,12 @@ class BriefcaseController extends Controller
         return $name === '' ? 'Untitled' : Str::limit($name, 120, '');
     }
 
-    private function downloadName(BriefcaseItem $item): string
+    private function downloadName(BriefcaseItem $item, bool $forUrl = false): string
     {
         $base = trim(preg_replace('/[^\p{L}\p{N} ._()\-]+/u', '_', $item->name)) ?: 'file';
+        if ($forUrl) {
+            $base = trim(preg_replace('/[^A-Za-z0-9._-]+/', '_', $base), '_') ?: 'file'; // plain characters only, so the URL stays tidy
+        }
 
         return $base.'.'.$item->extension;
     }

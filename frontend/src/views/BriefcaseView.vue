@@ -80,6 +80,22 @@ function open(item) {
   if (item.kind === 'link') return window.open(item.url, '_blank', 'noopener')
   window.open(`/api/briefcase/${item.id}/file`, '_blank', 'noopener')
 }
+// Hands a short-lived address to your installed Office app (needs Microsoft Office on this computer).
+const OFFICE = {
+  xlsx: ['ms-excel', 'Excel'], xlsm: ['ms-excel', 'Excel'], xls: ['ms-excel', 'Excel'], xlsb: ['ms-excel', 'Excel'], csv: ['ms-excel', 'Excel'],
+  docx: ['ms-word', 'Word'], doc: ['ms-word', 'Word'], pptx: ['ms-powerpoint', 'PowerPoint'], ppt: ['ms-powerpoint', 'PowerPoint'],
+}
+const officeApp = (item) => (item.kind === 'file' && OFFICE[item.extension] ? { scheme: OFFICE[item.extension][0], label: OFFICE[item.extension][1] } : null)
+async function openInApp(item) {
+  menuFor.value = null
+  try {
+    const { url } = await api.get(`/briefcase/${item.id}/open-link`)
+    window.location.href = `${officeApp(item).scheme}:ofe|u|${url}`
+    toasts.push({ title: `Opening in ${officeApp(item).label}…`, message: 'If nothing happens, your browser or Office may not allow it. Use Download instead.', kind: 'info', icon: 'sheet', duration: 6000 })
+  } catch (e) {
+    toasts.push({ title: 'Could not open', message: describeError(e), kind: 'info', icon: 'alert' })
+  }
+}
 const downloadUrl = (item) => `/api/briefcase/${item.id}/file?download=1`
 const goTo = (id) => router.push(id ? { name: 'briefcase', query: { folder: id } } : { name: 'briefcase' })
 
@@ -331,6 +347,7 @@ const input = 'w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 
                 <a v-if="i.kind === 'file'" role="menuitem" :href="downloadUrl(i)" class="block px-3 py-1.5 text-slate-200 hover:bg-slate-800" @click="menuFor = null">Download</a>
                 <button type="button" role="menuitem" class="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-slate-800" @click="startRename(i)">Rename</button>
                 <button type="button" role="menuitem" class="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-slate-800" @click="moveFor = i; menuFor = null">Move to…</button>
+                <button v-if="officeApp(i)" type="button" role="menuitem" class="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-slate-800" @click="openInApp(i)">Open in {{ officeApp(i).label }} <span class="text-[10px] text-slate-500">(beta)</span></button>
                 <button v-if="i.kind === 'file'" type="button" role="menuitem" class="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-slate-800" @click="pickReplace(i)">Upload new version</button>
                 <button type="button" role="menuitem" class="block w-full px-3 py-1.5 text-left hover:bg-slate-800" :class="confirmId === i.id ? 'bg-red-500/20 text-red-200' : 'text-red-300'" @click="remove(i)">{{ confirmId === i.id ? (i.kind === 'folder' ? 'Sure? Deletes everything inside' : 'Sure?') : 'Delete' }}</button>
               </div>
@@ -357,6 +374,7 @@ const input = 'w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 
                 <a v-if="i.kind === 'file'" role="menuitem" :href="downloadUrl(i)" class="block px-3 py-1.5 text-slate-200 hover:bg-slate-800" @click="menuFor = null">Download</a>
                 <button type="button" role="menuitem" class="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-slate-800" @click="startRename(i)">Rename</button>
                 <button type="button" role="menuitem" class="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-slate-800" @click="moveFor = i; menuFor = null">Move to…</button>
+                <button v-if="officeApp(i)" type="button" role="menuitem" class="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-slate-800" @click="openInApp(i)">Open in {{ officeApp(i).label }} <span class="text-[10px] text-slate-500">(beta)</span></button>
                 <button v-if="i.kind === 'file'" type="button" role="menuitem" class="block w-full px-3 py-1.5 text-left text-slate-200 hover:bg-slate-800" @click="pickReplace(i)">Upload new version</button>
                 <button type="button" role="menuitem" class="block w-full px-3 py-1.5 text-left hover:bg-slate-800" :class="confirmId === i.id ? 'bg-red-500/20 text-red-200' : 'text-red-300'" @click="remove(i)">{{ confirmId === i.id ? (i.kind === 'folder' ? 'Sure? Deletes everything inside' : 'Sure?') : 'Delete' }}</button>
               </div>
