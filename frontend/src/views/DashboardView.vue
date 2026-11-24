@@ -2,7 +2,8 @@
 import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import SystemPanel from '@/components/SystemPanel.vue'
-import HeroSection from '@/components/HeroSection.vue'
+import HunterBanner from '@/components/HunterBanner.vue'
+import TodayBrief from '@/components/TodayBrief.vue'
 import TodayList from '@/components/TodayList.vue'
 import ActivityChart from '@/components/ActivityChart.vue'
 import TierBars from '@/components/TierBars.vue'
@@ -63,7 +64,9 @@ onMounted(() => {
   </div>
 
   <template v-else>
-    <HeroSection :user="game.dashboard.user" :stats="game.dashboard.stats" :today="game.dashboard.today" />
+    <HunterBanner :user="game.dashboard.user" :stats="game.dashboard.stats" :today="game.dashboard.today" :achievements="game.dashboard.achievements" :gym="gym.data" :diet-streak="nutrition.data?.streak ?? 0" />
+
+    <TodayBrief :refresh-key="game.dashboard.stats.completions" />
 
     <div class="grid grid-cols-1 gap-5 lg:grid-cols-12">
       <div class="space-y-5 lg:col-span-8">
@@ -103,7 +106,7 @@ onMounted(() => {
             <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
               <div class="h-full rounded-full bg-amber-400 transition-all duration-700" :style="{ width: game.nextAchievement.progress.pct + '%' }"></div>
             </div>
-            <div class="mt-1 text-right text-[11px] text-slate-500">{{ game.nextAchievement.progress.done }} of {{ game.nextAchievement.linked_tasks }} quests</div>
+            <div class="mt-1 text-right text-[11px] text-slate-500">{{ game.nextAchievement.progress.done }} of {{ game.nextAchievement.progress.total }} {{ game.nextAchievement.progress.unit }}</div>
           </div>
           <p v-else class="text-sm text-slate-400">Link a quest to an achievement when you create it, and your progress shows up here.</p>
         </SystemPanel>

@@ -2,6 +2,9 @@
 
 Goal: finish and polish the System in 1-2 days of sessions, then build the arena combat game (domains, bosses, PvP) over about 5 weeks.
 
+## Done (Nov 24-25)
+- Calendar redesign (time grid, mobile one day), Briefcase, Hunter banner + Today brief.
+
 ## Session 1: Skills engine (OSRS-style levels)
 - Catalog of skills + per-user XP ledger. Every XP source (quest, gym log, diet day, achievement, later briefcase/AI quests) writes a ledger row tied to a skill.
 - OSRS-shaped XP curve, scaled to personal pace (tunable constant), cap 99. Total level = sum of skill levels.
@@ -16,12 +19,12 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
 - Context: profile, recent completions, skill levels, optionally gym/diet/calendar (toggles).
 - Provider pluggable: Claude Haiku (API key), Gemini free tier, or Ollama locally.
 
-## Session 3: Briefcase
+## Session 3: Briefcase (DONE)
 - Finder-style page: folders, upload (xlsx, csv, pdf, docx, images), rename, delete, replace with new version.
 - Link items: a Google Sheets/Drive/OneDrive URL opens straight in the web app (best for sheets you edit daily).
 - Files stored on a private disk, only served to the logged-in owner.
 
-## Session 4: Hero banner
+## Session 4: Hero banner (DONE, skill radar still to add; restyle when his design arrives)
 - LoL-style hunter card: rank frame that evolves, total level, skill radar, titles, streak, cosmetics unlocked by achievements.
 - Data model + placeholder first; final look comes from his design.
 
@@ -36,3 +39,7 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
 ## Open items
 - Google Calendar sync: first real test pending (needs his Google account added as a test user).
 - Punishment mechanic: penalty quests, not XP loss (undecided).
+
+## Decisions (Nov 24)
+- AI coach: free provider first (Gemini free tier), can see all app data except Google Calendar, up to ~10 users when deployed.
+- Skills: the nine listed above are approved; more can be added later.
