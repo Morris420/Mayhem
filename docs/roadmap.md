@@ -5,6 +5,7 @@ Docs in this folder:
 - `arena-design.md` - the combat game: scope, engine decision, combat maths, milestones.
 - `arena-playbook.md` - the implementation brief for building it (conventions, three.js notes, gotchas).
 - `ai-coach-setup.md`, `google-calendar-setup.md` - setting up the two optional integrations.
+- `next-session-prompt.md` - what to paste into a new chat to pick the project up.
 
 Goal: finish and polish the System in 1-2 days of sessions, then build the arena combat game (domains, bosses, PvP) over about 5 weeks.
 
