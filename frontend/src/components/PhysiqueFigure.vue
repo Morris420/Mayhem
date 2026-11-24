@@ -39,22 +39,29 @@ const sh = computed(() => L(50, 74)) // deltoid outer edge (half-width)
 const chest = computed(() => L(36, 50))
 const waist = computed(() => L(27, 31))
 
-// Right half of head + neck + torso + leg (the left half is the mirror image).
+// Right half of neck + torso + leg (the left half is the mirror image).
+//
+// The neck starts at y = 40, which is *behind* the head, and it is always narrower than the
+// jaw: that is what makes the head sit on the shoulders instead of stepping out of them.
 const body = computed(() => {
   const ankle = L(17, 19)
   const g = L(7, 8) // gap between the ankles
   const pts = [
-    pt(L(8, 14), 56), // neck, under the head
-    pt(L(9, 17), 72),
-    pt(L(11, 20), 78), // neck base
-    pt(L(17, 33), 81),
-    pt(L(26, 47), 86), // trapezius slope: much fuller when buff
-    pt(sh.value - 8, 94), // meets the deltoid
-    pt(chest.value, 125), // chest / lats
-    pt(L(32, 42), 148),
-    pt(waist.value, 176),
-    pt(L(30, 37), 205), // hip
-    pt(L(35, 46), 238), // thigh
+    pt(L(8.5, 11), 40), // neck, hidden behind the head
+    pt(L(8.8, 11.2), 50), // ...and never wider than the jaw, or it steps out of the head
+    pt(L(9.5, 13), 58), // neck base
+    pt(L(10.5, 15), 64),
+    pt(L(12, 19), 69), // the trapezius starts here...
+    pt(L(16, 27), 76),
+    pt(L(21, 37), 82),
+    pt(sh.value - 24, 88), // ...and ends exactly where the arm begins, so there is no seam
+    pt(sh.value - 8, 96), // under the deltoid
+    pt(chest.value, 120), // chest
+    pt(L(33, 44), 145), // lower ribs
+    pt(waist.value, 170), // waist: the narrowest point
+    pt(L(29, 35), 190), // iliac crest
+    pt(L(31, 38), 208), // hip
+    pt(L(35, 46), 240), // thigh
     pt(L(26, 29), 285), // knee
     pt(L(27, 33), 312), // calf
     pt(ankle, 358),
@@ -66,25 +73,27 @@ const body = computed(() => {
     pt(g, 362),
     pt(L(8, 9), 312), // inner leg, going back up
     pt(L(6, 7), 285),
-    pt(L(3, 4), 238),
-    [CX - 0.6, 215], // crotch (the halves overlap slightly so no seam shows)
+    pt(L(3, 4), 240),
+    [CX - 0.6, 216], // crotch (the halves overlap slightly so no seam shows)
   ]
   const [first, ...rest] = pts
-  return `M${f(first[0])} ${f(first[1])}${curve([first, ...rest])} L${CX - 0.6} 56 Z`
+  return `M${f(first[0])} ${f(first[1])}${curve([first, ...rest])} L${CX - 0.6} 40 Z`
 })
 
-// Head: a smooth egg shape with a fuller jaw.
+// Head: a skull, not an egg. Round cranium, widest at the temples, then a jaw that
+// tapers to the chin. It is the same at every stage, because training does not
+// change your head - which is also what makes the body read as bigger.
 const head = computed(() => {
-  const w = 17
   const pts = [
-    [CX - 0.6, 7],
-    [CX + 9, 8.5],
-    [CX + w - 1, 20],
-    [CX + w, 33],
-    [CX + w - 2.5, 46],
-    [CX + 10, 56],
-    [CX + 4.5, 62],
-    [CX - 0.6, 63.5],
+    [CX - 0.6, 6],
+    [CX + 7, 7.5], // crown
+    [CX + 14.5, 14],
+    [CX + 17, 25], // temple: the widest point
+    [CX + 17, 34], // cheek, held wide so the taper below reads as a jaw
+    [CX + 15.5, 42], // jaw angle
+    [CX + 11, 50], // jawline
+    [CX + 5, 56], // chin corner
+    [CX - 0.6, 58], // chin
   ]
   return `M${pts[0][0]} ${pts[0][1]}${curve(pts)} Z`
 })
@@ -103,7 +112,9 @@ const arm = computed(() => {
     [232, 14, 8, 9],
   ]
   const s = sh.value
-  const outer = [pt(s - 24, 88), pt(s - 8, 92), ...rows.map(([y, d]) => pt(s + d, y))]
+  // the corner at the top of this shape starts inside the torso, so only the round
+  // part of the deltoid ever shows
+  const outer = [pt(s - 32, 85), pt(s - 15, 92), pt(s - 4, 99), ...rows.map(([y, d]) => pt(s + d, y))]
   const inner = rows
     .slice(2) // the top of the inside edge is hidden behind the torso
     .map(([y, d, a, b]) => pt(s + d - L(a, b), y))
@@ -118,27 +129,29 @@ const ramp = (from, span = 0.35) => Math.min(1, Math.max(0, (t.value - from) / s
 const details = computed(() => {
   const c = chest.value
   const s = sh.value
-  const w = L(9, 12)
+  const w = L(9, 13)
   const wa = waist.value
   return [
-    // collarbone
-    { o: ramp(0, 0.2) * 0.45, d: `M${CX + 4} 89 Q${CX + 16} 90 ${CX + s - 18} 99` },
+    // the hollow at the base of the throat, and the collarbone running out to the shoulder
+    { o: ramp(0, 0.25) * 0.5, d: `M${CX + 4} 92 Q${CX + 18} 94 ${CX + s - 19} 102` },
     // lower edge of the pec + sternum
-    { o: ramp(0.05, 0.3), d: `M${CX + c - 4} 118 Q${CX + c * 0.55} ${L(138, 142)} ${CX + 1} 122` },
-    { o: ramp(0.05, 0.3) * 0.7, d: `M${CX} 100 V128` },
+    { o: ramp(0.05, 0.3), d: `M${CX + c - 5} 113 Q${CX + c * 0.5} ${L(130, 133)} ${CX + 1} 118` },
+    { o: ramp(0.05, 0.3) * 0.7, d: `M${CX} 96 V124` },
     // deltoid separation + bicep
-    { o: ramp(0.2), d: `M${CX + s - 15} 95 Q${CX + s - 22} 110 ${CX + s - 14} 128` },
+    { o: ramp(0.2), d: `M${CX + s - 15} 96 Q${CX + s - 22} 110 ${CX + s - 14} 128` },
     { o: ramp(0.4) * 0.8, d: `M${CX + s - 8} 132 Q${CX + s - 13} 142 ${CX + s - 9} 153` },
     // abs
-    { o: ramp(0.2), d: `M${CX} 130 V174` },
-    { o: ramp(0.25), d: `M${CX} 142 Q${CX + w / 2} 144.5 ${CX + w} 142 M${CX} 154 Q${CX + w / 2} 156.5 ${CX + w} 154 M${CX} 166 Q${CX + w / 2} 168.5 ${CX + w - 1} 166` },
+    { o: ramp(0.2), d: `M${CX} 126 V166` },
+    { o: ramp(0.25), d: `M${CX} 136 Q${CX + w / 2} 138.5 ${CX + w} 136 M${CX} 147 Q${CX + w / 2} 149.5 ${CX + w} 147 M${CX} 158 Q${CX + w / 2} 160.5 ${CX + w - 1} 158` },
     // obliques and lats
-    { o: ramp(0.35), d: `M${CX + w + 4} 138 Q${CX + w + 8} 156 ${CX + w + 3} 174` },
-    { o: ramp(0.5) * 0.9, d: `M${CX + c - 3} 130 Q${CX + c} 152 ${CX + wa + 2} 174` },
-    // traps
-    { o: ramp(0.55) * 0.9, d: `M${CX + L(12, 22)} 82 Q${CX + L(22, 40)} 86 ${CX + s - 14} 96` },
+    { o: ramp(0.35), d: `M${CX + w + 4} 133 Q${CX + w + 8} 151 ${CX + w + 3} 168` },
+    { o: ramp(0.5) * 0.9, d: `M${CX + c - 3} 126 Q${CX + c} 148 ${CX + wa + 2} 168` },
+    // the V over the hips, which is what makes the waist read as a waist
+    { o: ramp(0.3) * 0.85, d: `M${CX + L(21, 26)} 182 Q${CX + L(17, 21)} 199 ${CX + 5} 212` },
+    // traps, following the slope down to the shoulder
+    { o: ramp(0.5) * 0.9, d: `M${CX + L(10, 14)} 70 Q${CX + L(19, 33)} 79 ${CX + s - 21} 94` },
     // quads and calves
-    { o: ramp(0.35), d: `M${CX + L(25, 32)} 240 Q${CX + L(27, 36)} 262 ${CX + L(17, 21)} 282` },
+    { o: ramp(0.35), d: `M${CX + L(25, 32)} 242 Q${CX + L(27, 36)} 264 ${CX + L(17, 21)} 284` },
     { o: ramp(0.55) * 0.8, d: `M${CX + L(20, 27)} 296 Q${CX + L(22, 30)} 312 ${CX + L(15, 20)} 330` },
   ]
 })

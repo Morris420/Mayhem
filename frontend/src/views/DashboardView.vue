@@ -81,6 +81,13 @@ onMounted(() => {
         <SystemPanel title="Activity" icon="activity">
           <ActivityChart :data="game.dashboard.activity" />
         </SystemPanel>
+
+        <SystemPanel title="Achievements" icon="trophy" accent="amber">
+          <template #aside>
+            <span class="text-xs text-slate-400">{{ game.dashboard.stats.achievements_unlocked }} of {{ game.dashboard.stats.achievements_total }} unlocked</span>
+          </template>
+          <AchievementGrid :achievements="game.dashboard.achievements" />
+        </SystemPanel>
       </div>
 
       <aside class="space-y-5 lg:col-span-4">
@@ -129,13 +136,6 @@ onMounted(() => {
         </SystemPanel>
       </aside>
     </div>
-
-    <SystemPanel title="Achievements" icon="trophy" accent="amber">
-      <template #aside>
-        <span class="text-xs text-slate-400">{{ game.dashboard.stats.achievements_unlocked }} of {{ game.dashboard.stats.achievements_total }} unlocked</span>
-      </template>
-      <AchievementGrid :achievements="game.dashboard.achievements" />
-    </SystemPanel>
 
     <RouterLink :to="{ name: 'gym' }" class="group flex items-center gap-6 rounded-xl border border-cyan-500/30 bg-gradient-to-br from-[#0a1626] to-[#080d17] p-5 transition-colors hover:border-cyan-300/70" aria-label="Open the gym tracker">
       <div class="h-64 w-32 shrink-0 sm:h-72 sm:w-36"><PhysiqueFigure :stage="gym.data?.physique.stage ?? 1" :progress="(gym.data?.physique.next?.pct ?? 0) / 100" /></div>
