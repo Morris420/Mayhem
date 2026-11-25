@@ -15,19 +15,16 @@ Read these in the repo, in this order:
 - `docs/arena-design.md` — the combat game: scope, why three.js, the combat maths, milestones
 - `docs/arena-playbook.md` — the implementation brief: conventions, harness, three.js notes, gotchas
 
-**Where we are.** The productivity app is finished and I use it daily. The arena's **M1 is done**:
-`/arena` has a neon Training Hall, a locked third-person camera, and a capsule that falls, walks
-and collides, on a deterministic fixed-step loop driven by tests through `window.__arena`.
-The browser harness now lives in the repo (`cd frontend && npm run test:e2e`).
+**Where we are.** The productivity app is finished and I use it daily. The arena is a 3D
+Tekken-style anime fighter built for rollback netplay (`docs/arena-design.md` §0, decisions made).
+**M1 and M2 are done**: a dark neon Training Hall with ledges, a KayKit hunter (placeholder) that
+walks, sprints, jumps and wall-jumps, on our own deterministic engine with snapshot/restore.
+The browser harness lives in the repo (`cd frontend && npm run test:e2e`).
 
-**Direction change.** Since M1 I want the arena to be a 3D Tekken-style fighter in an anime
-look: blocks, simple 1/3-hit combos, unlockable abilities like a fire spell, and a fast, light
-network layer so I can later challenge other hunters online (and maybe a LAN arena with several
-hunters). Inspiration: RUSH proto (alcratz.itch.io/rush-proto). Your write-up of what that means
-is `docs/arena-design.md` §0.
-
-**Today:** first go through the four decisions at the end of §0 with me (short, with your
-recommendation). Then build the new M2 as decided.
+**Today: M2b, the fighter kit against a training dummy** — feel first. Light / Heavy / Block,
+1- and 3-hit strings with frame data, hitstop / hitstun / blockstun / knockdown, a dummy that
+stands or blocks on a toggle. Keyboard only (controllers are the very last step). Keep it all
+inside the deterministic simulation and keep the determinism rules in the playbook.
 
 Work the way the playbook says: take the whole milestone, run the unit tests, `php artisan test`
 and the browser suite, show me a screenshot, commit and push, update `docs/roadmap.md`. Ask me

@@ -13,10 +13,9 @@ then `docs/arena-design.md` for the plan, then this.
 
 | | Decision |
 |---|---|
-| Engine | **three.js** + **Rapier** (`@dimforge/rapier3d-compat`) for physics |
-| Fallback | Babylon.js, only if we end up writing an engine's worth of plumbing in week one |
+| Engine | **three.js** for rendering + **our own deterministic simulation** (`src/arena/physics.js`, `player.js`, `sim.js`). Rapier was used in M1 and removed in M2 (25 Nov): rollback netplay needs bit-identical results on every machine and cheap snapshots |
+| Models | KayKit Adventurers (CC0) as the placeholder hunter — docs/arena-assets.md |
 | Mode | **Real-time** single-player against one boss. PvP is a later decision, not a V1 constraint |
-| Models | **Built in code** — the neon silhouette look of `PhysiqueFigure.vue`, in 3D. No downloads, no licences, no logins |
 | Where | A new page in the existing SPA, inside the existing Vite build. Not a separate project |
 | Authority | The server owns stats, the boss, and every reward |
 
@@ -89,6 +88,18 @@ fixed steps. `input('attack')` answers `{accepted: false}` until M4.
 `--use-angle=swiftshader --enable-unsafe-swiftshader`, bloom included. The pixel read-back
 test proves frames are really drawn, not just that a canvas exists.
 
+**Determinism rules (for online play).** The simulation (`physics.js`, `player.js`, `sim.js`)
+must give bit-identical results on every machine:
+
+- only `+ - * /`, `Math.sqrt`, `Math.abs/min/max/floor/ceil`, comparisons. **Never**
+  `Math.sin/cos/tan/atan2/hypot/pow/exp/log` or `**` — their last digit can differ between
+  browsers. A unit test greps for them.
+- angles are stored as unit vectors (`facing: {x, z}`); turning uses `TURN_COS/TURN_SIN`
+  written out as literals. `state().player.yaw` exists for the renderer only.
+- no `Math.random`, no clock, no DOM: inputs in, state out. Randomness comes from the seeded rng.
+- `snapshot()` / `restore()` save and load the whole state as plain data (< 2 KB). A unit test
+  and a browser test rewind and replay and require an identical result.
+
 **The simulation also runs without a browser.** `src/arena/sim.js` has no three.js and no DOM,
 so Vitest runs it under Node (`src/arena/__tests__/sim.spec.js`): falls, walks, wall and
 pillar collisions, determinism. Prefer a unit test there for any rule; use the browser suite
@@ -129,13 +140,14 @@ it is what keeps the project readable by one person.
 ```
 frontend/src/arena/
   engine.js     renderer, scene, camera follow, the rAF loop, resize, dispose, the test hook
-  sim.js        the headless simulation: Rapier world + room + player, step(), state(), seed  [M1]
+  sim.js        the headless simulation: room + player, step(), state(), seed, snapshot/restore
+  physics.js    our collision: upright cylinder vs axis-aligned boxes, step-up, snap-down, walls  [M2]
   loop.js       the fixed-step clock (1/60 s, frame delta clamped at 100 ms)                [M1]
   input.js      keyboard -> stick (WASD / arrows); ignored in test mode                     [M1]
   rooms/        one data file per arena (training-hall.js)                                  [M1]
   world.js      roomBoxes() -> colliders AND meshes from the same list; lights, fog, trim
-  figure.js     what fighters look like. M1: a capsule; M2: the neon humanoid, same module
-  player.js     the kinematic character controller and movement feel (MOVE constants)
+  figure.js     what fighters look like: the glTF hunter + animation picking; capsule fallback
+  player.js     movement rules and feel (MOVE constants): walk, sprint, jump, wall hug/jump
   boss.js       the boss: stat block, AI state machine, telegraphs, hitboxes
   combat.js     damage, cooldowns, stamina, hit resolution, the fight result
   hud/          Vue components for bars, cooldowns, the result screen
@@ -231,11 +243,11 @@ cancelAnimationFrame(raf); resizeObserver.disconnect(); controls?.dispose()
 There should be a test that mounts and unmounts the page twice and asserts the WebGL context
 count did not grow.
 
-**Rapier.** The `-compat` build loads its wasm with `await RAPIER.init()` before anything else,
-which avoids top-level-await trouble in the Vite build. Use a **kinematic character controller**
-for the player (`world.createCharacterController`), not a dynamic rigid body — dynamic bodies
-make a player who slides, tips over and fights the camera. The boss can be kinematic too; only
-debris and props need dynamics.
+**Physics: ours, not a library** (since M2). The fighter is an upright cylinder against
+axis-aligned boxes (`physics.js`): vertical and horizontal moves resolved separately, push-out
+along the contact normal (so walls slide), step-up 0.3 m, snap-down 0.2 m, moves split into
+≤ 0.2 m sub-steps so nothing tunnels. Rapier did this in M1, but it is neither bit-identical
+across machines nor cheap to snapshot, and rollback needs both.
 
 **Hit detection.** For V1 do *not* use physics sensors for attacks. Resolve hits yourself during
 the attack's active window with a capsule-vs-capsule or sphere-overlap check against the target.
@@ -278,14 +290,18 @@ looks flat without it.
 - **The nav is nearly full on a phone** at seven items. Adding "Arena" makes eight — check the
   horizontal-overflow assertion at 390px, and if it fails, the labels are already hidden so the
   next lever is nav padding.
-- **Rapier's normal nudge factor.** With the default (`1e-4`) the character controller snags
-  on its own floor contact every ~13 steps and stops dead for a frame — 20% slower walking and
-  a visible stutter. `player.js` sets `setNormalNudgeFactor(0.01)`; a unit test measures the
-  walking distance, so this cannot silently come back.
-- **Bundle weight.** The arena chunk is ~4.9 MB (1.8 MB gzipped), loaded only on `/arena`.
-  three.js is ~150 KB of that gzipped; the rest is Rapier, whose wasm is 3 MB and which the
-  `-compat` build inlines as base64. Options are in `docs/roadmap.md` under "Arena: decisions
-  waiting". The design doc's "it loads" argument assumed far less than this.
+- **Post-processing kills anti-aliasing unless you ask.** The `EffectComposer` renders into its
+  own target; without `samples: 4` on it, every thin bright edge crawled and flickered while the
+  camera moved (Morrison's "flickering hue light"). Thin line geometry (GridHelper) shimmers too:
+  the floor grid is now a mipmapped texture.
+- **Neon close to the camera glares.** A trim strip a metre from the lens fills the screen and
+  the bloom smears it. The camera keeps `wallMargin` from walls and stays `belowTop` under the
+  top of the walls.
+- **Jumping onto ledges** (lessons from the Rapier version, still covered by tests): "grounded"
+  must not be reported while rising, and only a downward-facing surface is a ceiling. Either
+  mistake stops a jump dead halfway up a ledge.
+- **Bundle weight.** Arena chunk 680 KB (173 KB gzipped), mostly three.js; the hunter model is a
+  separate 1.07 MB gzipped file. (With Rapier it was 4.9 MB.)
 - **`php -S` for Laravel must start inside `public/`.** Laravel's `server.php` router finds
   `index.php` from the working directory. `artisan serve` does this for you, but it also drops
   most environment variables, which is why the e2e script uses `php -S` directly.

@@ -48,6 +48,10 @@ onBeforeUnmount(() => {
 
 // One decimal, a space where the minus sign would be so the columns don't jump,
 // and never "-0.0".
+// What the body is doing, in a word.
+const motion = (p) =>
+  p.wall ? 'wall' : !p.grounded ? 'airborne' : p.sprinting ? 'sprinting' : 'grounded'
+
 const fmt = (n) => {
   const v = Math.abs(n) < 0.05 ? 0 : n
   return (v >= 0 ? ' ' : '') + v.toFixed(1)
@@ -84,16 +88,17 @@ const fmt = (n) => {
         <div data-testid="arena-pos">
           pos {{ fmt(hud.player.pos.x) }} {{ fmt(hud.player.pos.y) }} {{ fmt(hud.player.pos.z) }}
         </div>
-        <div>
-          {{ hud.player.grounded ? 'grounded' : 'airborne'
-          }}<span v-if="testMode"> · tick {{ hud.tick }}</span>
+        <div data-testid="arena-motion">
+          {{ motion(hud.player) }}<span v-if="testMode"> · tick {{ hud.tick }}</span>
         </div>
       </div>
       <div
         class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-cyan-900/60 bg-black/50 px-4 py-1.5 text-xs text-slate-300 backdrop-blur-sm"
       >
-        <span class="font-mono text-cyan-300">WASD</span> or
-        <span class="font-mono text-cyan-300">arrows</span> to move
+        <span class="font-mono text-cyan-300">WASD</span> move ·
+        <span class="font-mono text-cyan-300">Shift</span> sprint ·
+        <span class="font-mono text-cyan-300">Space</span> jump · in the air, push into a wall to
+        cling
       </div>
     </template>
   </section>

@@ -449,17 +449,19 @@ tier bars, and the physique figure linking to the gym.
 ### 5.13 The arena (in progress)
 
 A 3D fighting game on its own page, where the nine skills become combat stats. Built with
-three.js (rendering) and Rapier (physics), loaded only when you open `/arena`. The plan is in
+three.js (rendering) and our own deterministic physics, loaded only when you open `/arena`. The plan is in
 `docs/arena-design.md`, the implementation brief in `docs/arena-playbook.md`.
 
-**M1, done:** a dark Training Hall with neon trim, a locked third-person camera, and a capsule
-you walk with WASD or the arrow keys, which falls and collides with the walls and pillars. The
-game runs on a fixed 1/60 s step in plain JavaScript (`src/arena/`), separate from Vue; the page
-only shows a small HUD the game updates five times a second. With `?test=1` nothing moves on its
-own and tests drive it step by step through `window.__arena`.
+**Done so far (M1, M2):** a dark Training Hall with neon trim and ledges, a locked third-person
+camera, and a hooded hunter (a CC0 model, placeholder) you move with WASD, sprint with Shift and
+jump with Space; in mid-air you can cling to a wall and kick off it. The game runs on a fixed
+1/60 s step in plain JavaScript (`src/arena/`) on our own deterministic physics, so the same
+inputs give the same result on every machine — the foundation for online fights. Vue only shows
+a small HUD the game updates five times a second. With `?test=1` nothing moves on its own and
+tests drive it step by step through `window.__arena`.
 
-*Code:* `ArenaView.vue`, `src/arena/` (`engine`, `sim`, `loop`, `world`, `player`, `figure`,
-`input`, `rooms/`).
+*Code:* `ArenaView.vue`, `src/arena/` (`engine`, `sim`, `physics`, `player`, `loop`, `world`,
+`figure`, `input`, `rooms/`). Assets and licences: `docs/arena-assets.md`.
 
 ---
 
@@ -501,8 +503,8 @@ cover the API client, the chart and the arena simulation.
 of constants (`Progression`, `SkillCurve`, `DietRules`, `AchievementEngine`). Comments explain
 intent. Pint formats PHP; Prettier and ESLint handle the frontend. Icons are inline SVG paths in
 one component rather than an icon library, and charts are hand-drawn SVG. The app itself has
-three runtime dependencies (Vue, Pinia, Vue Router); the arena adds three.js and Rapier, which
-only load on its page.
+three runtime dependencies (Vue, Pinia, Vue Router); the arena adds three.js, which only loads
+on its page.
 
 ---
 

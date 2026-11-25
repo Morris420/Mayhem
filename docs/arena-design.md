@@ -134,7 +134,11 @@ All of it is rendering-only, so none of it touches the deterministic simulation.
 
 M1 stays done. Then:
 
-- **M2 — The fighter kit vs a dummy.** Own fixed-point sim replaces Rapier (the M1 tests
+- **M2 — Movement, the hunter, our own engine. (DONE 25 Nov)** Bigger darker room with ledges,
+  sprint / jump / wall hug + wall jump, the KayKit hunter with animations, Rapier replaced by
+  our own deterministic sim with snapshot/restore. (Not in the original plan: Morrison asked for
+  the movement and model first.)
+- **M2b — The fighter kit vs a dummy.** Own fixed-point sim replaces Rapier (the M1 tests
   carry over), two fighters facing each other, walk / sidestep / backdash, Light / Heavy / Block,
   the 1- and 3-hit strings with frame data, hitstop/stun/knockdown. A capsule-shaped fighter
   is fine; the opponent is a training dummy that blocks or stands on a toggle.
@@ -147,7 +151,16 @@ M1 stays done. Then:
 - **N2 — Online challenges.** Deploy, TURN, challenge another hunter from the app.
 - **N3 — Free-for-all arena** for 3–4 hunters.
 
-### Decisions for Morrison (tomorrow)
+### Decisions — answered by Morrison, 25 Nov 01:48
+
+1. **Own engine: yes.** Done the same night: Rapier is gone, `src/arena/physics.js` is ours.
+   Float64 with only exactly-rounded operations rather than fixed-point integers (see the
+   playbook §2, "determinism rules") — simpler, and just as identical across machines.
+2. **Skill levels should not matter much.** Implement the effect, keep it small, tune later.
+3. **Feel first.** The fighter kit against a dummy comes before the look polish.
+4. **Keyboard first.** Bluetooth controllers (Xbox, Switch) are the final step.
+
+The original questions, for the record:
 
 1. **Drop Rapier for our own fixed-point fighting sim?** Recommended: yes. It's needed for
    rollback, and it removes most of the download.
