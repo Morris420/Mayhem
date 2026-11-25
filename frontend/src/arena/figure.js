@@ -13,6 +13,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { FOOT_OFFSET, MOVE } from './player.js'
 import { COMBAT, MOVES } from './moves.js'
+import { ABILITIES } from './abilities.js'
 
 export const HUNTER_URL = '/models/arena/hunter.glb'
 
@@ -236,11 +237,26 @@ function attackProgress(m, frame, impact) {
 // The non-locomotion clip a fighter state calls for: [name, progress 0..1] for a
 // scrubbed clip, [name, 'loop'] for one that plays by itself, or null = locomotion.
 // ctx: { landing (s left), sinceDouble (s since a double jump), near (bool) }
+const CAST_CLIP = 'Straight'
+const CAST_IMPACT = 0.39
+
 export function overrideClip(p, ctx = {}) {
   switch (p.combat) {
     case 'attack': {
       const name = MOVE_CLIPS[p.move]
       return [name, attackProgress(MOVES[p.move], p.moveFrame, IMPACT[name] ?? 0.4)]
+    }
+    case 'cast': {
+      // Scrubbed like an attack: the hand thrusts out exactly when the bolt leaves.
+      // No spellcast clip yet, so the right straight's thrust stands in (CAST_CLIP).
+      const ab = ABILITIES[p.slots?.[p.cast]]
+      if (!ab) return null
+      const f = p.castFrame
+      const t =
+        f <= ab.startup
+          ? CAST_IMPACT * (f / ab.startup)
+          : CAST_IMPACT + (1 - CAST_IMPACT) * clamp01((f - ab.startup) / ab.recovery)
+      return [CAST_CLIP, t]
     }
     case 'block':
       return [CLIPS.fightIdle, 0.08] // guard up, held still

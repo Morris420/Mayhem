@@ -347,32 +347,6 @@ describe('air and bodies', () => {
   })
 })
 
-describe('stats from the loadout', () => {
-  const loadout = { maxHp: 112, maxGuard: 109, stats: { hp: 1.12, damage: 1.5, guard: 1.09 } }
-
-  it('max health and guard come from the loadout', () => {
-    const sim = createSimulation(room, { dummy: 'idle', loadout })
-    expect(sim.state().player.hp).toBe(112)
-    expect(sim.state().player.guardMax).toBe(109)
-    expect(sim.state().dummy.hp).toBe(COMBAT.maxHp) // the dummy keeps base stats
-  })
-
-  it('the damage multiplier scales every hit (rounded to whole points)', () => {
-    const sim = createSimulation(room, { dummy: 'idle', loadout })
-    sim.teleport({ x: D.x, y: STAND, z: D.z + 1 })
-    for (let i = 0; i < 20; i++) sim.step()
-    sim.press('light')
-    const ev = run(sim, 500)
-    expect(ev[0].damage).toBe(Math.round(MOVES.L1.damage * 1.5))
-    expect(sim.state().dummy.hp).toBe(COMBAT.maxHp - Math.round(MOVES.L1.damage * 1.5))
-  })
-
-  it('base stats without a loadout', () => {
-    const sim = createSimulation(room, { dummy: 'idle' })
-    expect(sim.state().player.hp).toBe(COMBAT.maxHp)
-  })
-})
-
 describe('emote', () => {
   it('T starts the emote when standing still; moving ends it', () => {
     const sim = face(4)

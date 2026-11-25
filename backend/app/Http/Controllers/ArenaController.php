@@ -3,14 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Support\Arena\Loadout;
+use App\Support\SkillService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ArenaController extends Controller
 {
-    /** Your fighter: stat multipliers and abilities, computed from your skills. */
-    public function loadout(Request $request, Loadout $loadout): JsonResponse
+    /** Your fighter: stats and abilities from the skills you trained. Read-only, always the logged-in user's. */
+    public function loadout(Request $request, SkillService $skillService): JsonResponse
     {
-        return response()->json($loadout->for($request->user()));
+        $user = $request->user();
+        $skillService->refresh($user);
+        $levels = collect($skillService->overview($user))->pluck('level', 'slug')->all();
+
+        return response()->json(Loadout::fromLevels($levels));
     }
 }

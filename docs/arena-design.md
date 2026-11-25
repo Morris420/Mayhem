@@ -279,6 +279,11 @@ rather than verify.
 
 ## 4. Skills become a fighter
 
+> **Superseded by decision 2 in §0 ("skills should not matter much").** What is built (milestone C,
+> 25 Nov): each stat follows one skill and moves only ±15–20% between level 1 and 99 — see
+> `ArenaRules.php` and `docs/arena-build-guide.md` C. The table below is the original first
+> draft, kept for the record; its 6× gap is exactly what was decided against.
+
 This is the part that makes the whole System pay off: the nine skills you have been grinding
 turn into a character sheet. First draft, all of it tunable in `ArenaRules`:
 

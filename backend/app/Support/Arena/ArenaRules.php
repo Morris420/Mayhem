@@ -3,47 +3,53 @@
 namespace App\Support\Arena;
 
 /**
- * Every arena number the server decides, in one place (like Progression and SkillCurve).
+ * Every balance number of the arena that the server owns, in one place (like Progression and
+ * SkillCurve). The client's feel numbers (frame data, speeds) live in frontend/src/arena/moves.js;
+ * what your skills are worth in a fight lives here.
  *
- * Decided with Morrison (arena-design.md §0): skill levels matter only a little. A
- * fresh hunter and a level-99 one fight on nearly the same terms, so technique
- * decides a fight, but the grind is still visible. Tune here; nothing else changes.
+ * Decided 25 Nov (arena-design.md §0, decision 2): skills matter only a little. Each stat moves
+ * linearly with one skill's level, from (100 - span)% at level 1 to (100 + span)% at level 99, so a
+ * level-50 hunter fights exactly like the frame data was tuned, and a maxed hunter against a fresh one
+ * is a visible edge, never a foregone conclusion.
  */
 class ArenaRules
 {
-    /** How much a stat can grow, from all skills at level 1 to all at 99 (0.20 = +20%). */
-    public const MAX_BONUS = [
-        'hp' => 0.20,
-        'damage' => 0.15,
-        'guard' => 0.20,
-    ];
-
-    /** Which skills feed each stat, and how much each one counts (weights sum to 1). */
-    public const SOURCES = [
-        'hp' => ['stamina' => 0.6, 'discipline' => 0.4],
-        'damage' => ['strength' => 0.7, 'intellect' => 0.3],
-        'guard' => ['discipline' => 0.6, 'faith' => 0.4],
-    ];
-
-    /** The base values the multipliers apply to (they match the game's COMBAT constants). */
-    public const BASE_HP = 100;
-
-    public const BASE_GUARD = 100;
+    public const MAX_LEVEL = 99;
 
     /**
-     * Abilities unlock at skill levels: something to chase. Only those marked live exist in
-     * the game yet; the rest show as "coming" so the goal is visible.
+     * stat => [skill slug, base value, span in % either side of the base].
+     * `damage` and `ability_power` are percentages the simulation multiplies its frame data by;
+     * `health` and `guard` are the fighter's pools.
      */
-    public const ABILITIES = [
-        ['slug' => 'fire_bolt', 'name' => 'Fire bolt', 'skill' => 'intellect', 'level' => 10, 'live' => false],
-        ['slug' => 'second_wind', 'name' => 'Second wind', 'skill' => 'faith', 'level' => 10, 'live' => false],
-        ['slug' => 'iron_skin', 'name' => 'Iron skin', 'skill' => 'discipline', 'level' => 20, 'live' => false],
-        ['slug' => 'heavy_blow', 'name' => 'Heavy blow', 'skill' => 'strength', 'level' => 10, 'live' => true],
+    public const STATS = [
+        'health' => ['stamina', 100, 20],
+        'guard' => ['discipline', 100, 20],
+        'damage' => ['strength', 100, 15],
+        'ability_power' => ['intellect', 100, 15],
     ];
 
-    /** 0 at level 1, 1 at level 99. */
-    public static function progress(int $level): float
+    /** Mana is the same for everyone for now: abilities differ by what you unlocked, not by pool size. */
+    public const MANA = 100;
+
+    /**
+     * The abilities, in slot order (Q, E, R): [slug, name, skill, level needed, built yet].
+     * `built` = false means it is shown in the HUD as coming but cannot be cast yet.
+     * Fire bolt is every hunter's first spell (Intellect 1), so there is always something to try.
+     */
+    public const ABILITIES = [
+        ['fire_bolt', 'Fire bolt', 'intellect', 1, true],
+        ['second_wind', 'Second wind', 'faith', 10, false],
+        ['iron_skin', 'Iron skin', 'discipline', 20, false],
+    ];
+
+    public const KEYS = ['Q', 'E', 'R'];
+
+    /** A stat's value for a skill level, rounded to a whole number. */
+    public static function stat(string $stat, int $level): int
     {
-        return (max(1, min(99, $level)) - 1) / 98;
+        [, $base, $span] = self::STATS[$stat];
+        $t = (max(1, min($level, self::MAX_LEVEL)) - 1) / (self::MAX_LEVEL - 1); // 0 .. 1
+
+        return (int) round($base * (1 + $span / 100 * (2 * $t - 1)));
     }
 }

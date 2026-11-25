@@ -2,57 +2,43 @@
 
 namespace App\Support\Arena;
 
-use App\Models\User;
-use App\Support\SkillService;
-
 /**
- * A hunter's fighter, computed from the skills they trained. The client receives
- * multipliers and unlocks and never sends them back: the server owns these numbers.
+ * Skills -> a fighter: the stat block and abilities the arena hands the simulation. Pure: it takes skill
+ * levels and returns plain data, so it is unit-testable without a database. The client never computes
+ * any of this; it receives it from GET /api/arena/loadout and feeds it into the sim as an input.
  */
 class Loadout
 {
-    public function __construct(private SkillService $skills) {}
-
-    /** @return array{stats: array, maxHp: int, maxGuard: int, abilities: array, levels: array} */
-    public function for(User $user): array
-    {
-        $this->skills->refresh($user);
-        $levels = collect($this->skills->overview($user))->pluck('level', 'slug')->map(fn ($l) => (int) $l)->all();
-
-        return self::fromLevels($levels);
-    }
-
     /**
-     * The pure calculation, separate so it can be unit-tested with any levels.
-     *
-     * @param  array<string, int>  $levels  skill slug => level
+     * @param  array<string, int>  $levels  skill slug => level (missing skills count as level 1)
+     * @return array{stats: array<string, int>, sources: array<string, array{skill: string, level: int}>, abilities: array<int, array>}
      */
     public static function fromLevels(array $levels): array
     {
+        $level = fn (string $slug) => max(1, (int) ($levels[$slug] ?? 1));
+
         $stats = [];
-        foreach (ArenaRules::SOURCES as $stat => $sources) {
-            $p = 0.0;
-            foreach ($sources as $skill => $weight) {
-                $p += $weight * ArenaRules::progress($levels[$skill] ?? 1);
-            }
-            $stats[$stat] = round(1 + ArenaRules::MAX_BONUS[$stat] * $p, 3);
+        $sources = [];
+        foreach (ArenaRules::STATS as $stat => [$skill]) {
+            $stats[$stat] = ArenaRules::stat($stat, $level($skill));
+            $sources[$stat] = ['skill' => $skill, 'level' => $level($skill)];
+        }
+        $stats['mana'] = ArenaRules::MANA;
+
+        $abilities = [];
+        foreach (ArenaRules::ABILITIES as $i => [$slug, $name, $skill, $needs, $built]) {
+            $abilities[] = [
+                'slug' => $slug,
+                'name' => $name,
+                'slot' => $i + 1,
+                'key' => ArenaRules::KEYS[$i],
+                'skill' => $skill,
+                'requires' => $needs,
+                'built' => $built,
+                'unlocked' => $built && $level($skill) >= $needs,
+            ];
         }
 
-        $abilities = array_map(fn ($a) => [
-            'slug' => $a['slug'],
-            'name' => $a['name'],
-            'skill' => $a['skill'],
-            'level' => $a['level'],
-            'live' => $a['live'],
-            'unlocked' => ($levels[$a['skill']] ?? 1) >= $a['level'],
-        ], ArenaRules::ABILITIES);
-
-        return [
-            'stats' => $stats,
-            'maxHp' => (int) round(ArenaRules::BASE_HP * $stats['hp']),
-            'maxGuard' => (int) round(ArenaRules::BASE_GUARD * $stats['guard']),
-            'abilities' => $abilities,
-            'levels' => $levels,
-        ];
+        return ['stats' => $stats, 'sources' => $sources, 'abilities' => $abilities];
     }
 }

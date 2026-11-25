@@ -27,6 +27,7 @@ import {
 import { createEffects } from './effects.js'
 import { createControls } from './input.js'
 import { createShield } from './shield.js'
+import { createBolts } from './bolts.js'
 import { createFixedStep, stepsFor, STEP_S } from './loop.js'
 
 // The camera orbits the player under mouse control (click the arena to capture
@@ -79,7 +80,7 @@ export async function createArena(
     test = false,
     seed = 1,
     dummy = 'auto',
-    loadout = null,
+    loadout = undefined, // the player's stats + abilities from the server (stores/arena.js)
     onHud = () => {},
   } = {},
 ) {
@@ -105,6 +106,7 @@ export async function createArena(
   const roomScene = buildRoomScene(room)
   scene.add(roomScene)
   const effects = createEffects(scene)
+  const bolts = createBolts(scene)
 
   // --- simulation -----------------------------------------------------------
   const sim = createSimulation(room, { seed, dummy, loadout })
@@ -235,8 +237,10 @@ export async function createArena(
     figures.forEach((fig, i) => fig.place(pos[i], lerpAngle(prev[i].yaw, curr[i].yaw, alpha)))
     const st = sim.state()
     shields.forEach((sh, i) => sh.update(i === 0 ? st.player : st.dummy, pos[i], dt))
+    bolts.sync(st.projectiles)
     effects.update(dt)
     elapsed += dt
+    bolts.update(dt, elapsed)
 
     const me = pos[0]
     camY =
@@ -339,7 +343,7 @@ export async function createArena(
   // --- test hook --------------------------------------------------------------
   // Exposed as window.__arena by ArenaView when the page is opened with ?test=1.
   // Shape agreed in arena-playbook §2.
-  const BUTTONS = ['jump', 'light', 'heavy', 'dash', 'emote']
+  const BUTTONS = ['jump', 'light', 'heavy', 'dash', 'ability1', 'ability2', 'ability3', 'emote']
   const testHook = {
     ready: true,
     figure: figures[0].kind,
@@ -362,7 +366,8 @@ export async function createArena(
     state: () => sim.state(),
     // Controls, held until changed: { x, y, sprint, jump, light, heavy, block, dash }
     // (x = right, y = forward, each -1..1; only the fields given change).
-    // A button name ('jump', 'light', 'heavy', 'dash') = one tap on the next step.
+    // A button name ('jump', 'light', 'heavy', 'dash', 'ability1'-'ability3', or
+    // 'ability:1'-'ability:3') = one tap on the next step.
     // 'stop' = let go of everything.
     input(action) {
       if (action === 'stop') {
@@ -375,6 +380,9 @@ export async function createArena(
           heavy: false,
           block: false,
           dash: false,
+          ability1: false,
+          ability2: false,
+          ability3: false,
         })
         return { accepted: true }
       }
@@ -386,8 +394,11 @@ export async function createArena(
         sim.setInput(action)
         return { accepted: true }
       }
-      if (String(action).startsWith('ability:')) {
-        return { accepted: false, reason: 'abilities arrive with the stats' }
+      // 'ability:1' (the playbook's spelling) = 'ability1'
+      const ab = /^ability:([123])$/.exec(String(action))
+      if (ab) {
+        sim.press(`ability${ab[1]}`)
+        return { accepted: true }
       }
       throw new Error(`Unknown arena input: ${JSON.stringify(action)}`)
     },
@@ -448,6 +459,7 @@ export async function createArena(
       dummyClip: figures[1]?.current?.() ?? null,
       shield: shields.map((sh) => sh.size()),
       sparks: effects.count(),
+      bolts: bolts.count(),
       drawCalls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
       geometries: renderer.info.memory.geometries,
@@ -466,6 +478,7 @@ export async function createArena(
     for (const fig of figures) fig.dispose?.()
     for (const sh of shields) sh.dispose()
     effects.dispose()
+    bolts.dispose()
     disposeTree(scene)
     bloom.dispose()
     composer.dispose()
