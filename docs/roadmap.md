@@ -83,7 +83,8 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
   - Dash = Mixamo's Run To Rolling on the floor (no more floating), 0.9 s, ~4 m; double jump plays a normal jump.
   - Animation: feet are pinned to the floor every frame (no more sinking or floating clips); blend times per state (strikes snap in, recoveries ease out).
   - Layout: the arena fills the width; the controls strip is gone.
-- **Next: the arena preset (done: the church), then VFX (anime hit effects), then D (the boss).** The whole remaining plan is `docs/arena-build-guide.md` (milestones A-G and the production checklist). Start a new chat with `docs/next-session-prompt.md`; work on the `arena` branch.
+- **Training Room (25 Nov):** the new default arena, for testing movement, combat and VFX. Built from boxes only (no download): navy surfaces with glowing grid lines from a world-space shader (`gridMaterial` in world.js; 2 m cells, so distances read off the floor), pastel props, a ceiling, real shadows. Zones: sparring floor in the middle, a 1 / 2 / 3.2 m ledge staircase, a high platform with a gap, cabinets for wall jumps, vault-height tables, crates. The church becomes the boss room (`?room=ruined-church`). Screenshot: docs/screenshots/arena-training-room.png.
+- **Next: VFX (anime hit effects) in the Training Room, then D (the boss, in the church), then VFX (anime hit effects), then D (the boss).** The whole remaining plan is `docs/arena-build-guide.md` (milestones A-G and the production checklist). Start a new chat with `docs/next-session-prompt.md`; work on the `arena` branch.
 
 ## Arena: decisions waiting for you
 - Milestone C balance (my picks, all one-line changes in `ArenaRules`): fresh hunter = 80 health / 85% damage, maxed = 120 / 115%; Fire bolt unlocked from Intellect 1 so you can try it now.

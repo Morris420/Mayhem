@@ -124,6 +124,62 @@ function dust(room, count = 260) {
   return points
 }
 
+// A surface with glowing grid lines drawn from its world position (so every box,
+// whatever its size, gets square cells that line up): the Dani-style training
+// room look. Lit like any standard material; the lines are emissive, so the
+// bloom pass makes them glow.
+//   line   colour of the lines     cell   metres per cell
+//   width  line width in metres    glow   how bright the lines are
+export function gridMaterial({ color, line = '#cfe9ff', cell = 2, width = 0.05, glow = 1.6 }) {
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05 })
+  mat.userData.grid = { line, cell, width, glow }
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.gridLine = { value: new THREE.Color(line) }
+    shader.uniforms.gridCell = { value: cell }
+    shader.uniforms.gridWidth = { value: width }
+    shader.uniforms.gridGlow = { value: glow }
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nvarying vec3 vGridPos;\nvarying vec3 vGridNormal;',
+      )
+      .replace(
+        '#include <worldpos_vertex>',
+        `#include <worldpos_vertex>
+  vGridPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+  vGridNormal = normalize(mat3(modelMatrix) * objectNormal);`,
+      )
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+varying vec3 vGridPos;
+varying vec3 vGridNormal;
+uniform vec3 gridLine;
+uniform float gridCell;
+uniform float gridWidth;
+uniform float gridGlow;
+float gridLines(vec2 p) {
+  vec2 q = p / gridCell;
+  vec2 d = abs(fract(q - 0.5) - 0.5) * gridCell; // metres to the nearest line
+  vec2 aa = fwidth(p) * 1.2;
+  vec2 m = 1.0 - smoothstep(vec2(gridWidth * 0.5), vec2(gridWidth * 0.5) + aa, d);
+  return max(m.x, m.y);
+}`,
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+  vec3 an = abs(vGridNormal);
+  vec2 gp = an.y > an.x && an.y > an.z ? vGridPos.xz : (an.x > an.z ? vGridPos.zy : vGridPos.xy);
+  float gl = gridLines(gp);
+  totalEmissiveRadiance += gridLine * gl * gridGlow;
+  diffuseColor.rgb = mix(diffuseColor.rgb, gridLine, gl * 0.3);`,
+      )
+  }
+  return mat
+}
+
 // Builds everything visible. Static geometry is merged by material, so the whole
 // room is a handful of draw calls (budget: playbook §6). Call
 // group.userData.update(seconds) each frame for the ambient animation.
@@ -138,21 +194,55 @@ export function buildRoomScene(room) {
     )
 
   const kitted = room.drawWalls === false // a kit draws the floor, walls and pillars
+  const G = room.grid // the grid style: { line, cell, width, glow }, or none
   const floor = new THREE.Mesh(
     pick(['floor']),
-    new THREE.MeshStandardMaterial({ color: c.floor, roughness: 0.9, metalness: 0.05 }),
+    G
+      ? gridMaterial({ color: c.floor, ...G })
+      : new THREE.MeshStandardMaterial({ color: c.floor, roughness: 0.9, metalness: 0.05 }),
   )
   floor.name = 'floor'
+  floor.receiveShadow = true
   if (!kitted) group.add(floor)
 
   const walls = new THREE.Mesh(
     pick(['wall', 'pillar']),
-    new THREE.MeshStandardMaterial({ color: c.wall, roughness: 0.75, metalness: 0.15 }),
+    G
+      ? gridMaterial({ color: c.wall, ...G })
+      : new THREE.MeshStandardMaterial({ color: c.wall, roughness: 0.75, metalness: 0.15 }),
   )
   walls.name = 'walls'
+  walls.receiveShadow = true
   if (!kitted) group.add(walls)
 
-  if (room.blocks?.length) {
+  if (G && room.drawCeiling) {
+    // The ceiling is only drawn: the collision lid sits at the same height.
+    const hw = room.width / 2 + room.wallThickness
+    const hd = room.depth / 2 + room.wallThickness
+    const ceiling = new THREE.Mesh(
+      boxGeometry([0, room.wallHeight + 0.25, 0], [hw, 0.25, hd]),
+      gridMaterial({ color: c.ceiling ?? c.wall, ...G }),
+    )
+    ceiling.name = 'ceiling'
+    group.add(ceiling)
+  }
+
+  if (G && room.blocks?.length) {
+    // Props: one mesh per colour, each with a finer, fainter grid.
+    const byColor = {}
+    for (const b of room.blocks) (byColor[b.color ?? c.block] ??= []).push(b)
+    for (const [color, list] of Object.entries(byColor)) {
+      const mesh = new THREE.Mesh(
+        mergeGeometries(
+          list.map((b) => boxGeometry([b.x, b.h / 2, b.z], [b.w / 2, b.h / 2, b.d / 2])),
+        ),
+        gridMaterial({ color, line: G.propLine ?? '#ffffff', cell: 1, width: 0.025, glow: 0.15 }),
+      )
+      mesh.name = 'blocks'
+      mesh.castShadow = mesh.receiveShadow = true
+      group.add(mesh)
+    }
+  } else if (room.blocks?.length) {
     const blocks = new THREE.Mesh(
       pick(['block']),
       new THREE.MeshStandardMaterial({ color: c.block ?? c.wall, roughness: 0.7, metalness: 0.2 }),
@@ -214,7 +304,23 @@ export function buildRoomScene(room) {
     new THREE.HemisphereLight(L.sky ?? '#4a62b8', L.ground ?? '#010104', L.skyIntensity ?? 0.55),
   )
   const key = new THREE.DirectionalLight(L.moon ?? '#a9d8ff', L.moonIntensity ?? 0.6)
-  key.position.set(5, 12, 7)
+  key.position.set(...(L.keyFrom ?? [5, 12, 7]))
+  if (room.shadows) {
+    // Real shadows for the fighters and props: one map over the whole room.
+    key.castShadow = true
+    const half = Math.max(room.width, room.depth) / 2 + 2
+    Object.assign(key.shadow.camera, {
+      left: -half,
+      right: half,
+      top: half,
+      bottom: -half,
+      near: 1,
+      far: 80,
+    })
+    key.shadow.mapSize.set(2048, 2048)
+    key.shadow.bias = -0.0005
+    key.shadow.normalBias = 0.03
+  }
   group.add(key)
   if (L.fill) {
     // A second, softer key from the other side so nothing falls into black.

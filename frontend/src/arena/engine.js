@@ -86,6 +86,10 @@ export async function createArena(
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
+  if (room.shadows) {
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  }
   renderer.toneMappingExposure = room.exposure ?? 1.0
   renderer.domElement.style.display = 'block'
   renderer.domElement.style.width = '100%'
@@ -127,6 +131,13 @@ export async function createArena(
     const fig = gltf
       ? createHunterFigure(gltf, { edge, palette: isDummy ? 'enemy' : 'hero' })
       : createCapsuleFigure({ edge })
+    if (room.shadows) {
+      // Real shadows here: the fighters cast them, and the blob is not needed.
+      fig.object.traverse((o) => {
+        if (o.isMesh) o.castShadow = true
+        if (o.name === 'player-shadow') o.visible = false
+      })
+    }
     scene.add(fig.object)
     return fig
   })

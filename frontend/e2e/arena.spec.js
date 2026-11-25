@@ -27,7 +27,7 @@ test.afterEach(async ({ page }, info) => {
 })
 
 // Most tests run in the Dungeon Gate: they need its staircase and walls. The
-// Ruined Church (the default) has its own test.
+// Training Room (the default) and the Ruined Church have their own tests.
 async function openArena(page, room = 'training-hall') {
   await page.goto(`/arena?test=1&room=${room}`)
   await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 60_000 })
@@ -57,8 +57,28 @@ test('the arena loads and actually draws the lit dungeon', async ({ page }) => {
   expect(dbg.drawCalls).toBeLessThan(120)
 })
 
-test('the Ruined Church: the default arena loads, and its walls hold', async ({ page }) => {
+test('the Training Room: the default arena, lit, with shadows and props', async ({ page }) => {
   await page.goto('/arena?test=1')
+  await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 90_000 })
+  await page.evaluate(() => window.__arena.dummy('idle'))
+  const dbg = await page.evaluate(() => window.__arena.debug())
+  expect(dbg.figure).toBe('hunter')
+  expect(dbg.drawCalls).toBeLessThan(140)
+  const px = await page.evaluate(() => window.__arena.pixels())
+  expect(px.lit).toBeGreaterThan(0.5)
+  await step(page, 1200)
+  await page.evaluate(() => window.__arena.camera({ yaw: 35, pitch: 28, distance: 14 }))
+  await step(page, 50)
+  await page.screenshot({ path: `${SHOTS}arena-training-room.png` })
+  // Up the ledge staircase in the back-left: the props are solid.
+  await page.evaluate(() => window.__arena.teleport({ x: -13, y: 2.2, z: -6 }))
+  const s = await step(page, 500)
+  expect(s.player.grounded).toBe(true)
+  expect(s.player.pos.y).toBeGreaterThan(1.9) // standing on the 1 m ledge
+})
+
+test('the Ruined Church (the boss room): loads, and its walls hold', async ({ page }) => {
+  await page.goto('/arena?test=1&room=ruined-church')
   await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 90_000 })
   await page.evaluate(() => window.__arena.dummy('idle'))
   const dbg = await page.evaluate(() => window.__arena.debug())
