@@ -59,8 +59,31 @@ test('the arena loads and actually draws the lit dungeon', async ({ page }) => {
   expect(dbg.drawCalls).toBeLessThan(120)
 })
 
-test('the Training Room: the default arena, lit, with shadows and props', async ({ page }) => {
+test('the Open Field: the default arena, sky, hills and grass', async ({ page }) => {
   await page.goto('/arena?test=1&boss=0')
+  await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 120_000 })
+  await page.evaluate(() => window.__arena.dummy('idle'))
+  const dbg = await page.evaluate(() => window.__arena.debug())
+  expect(dbg.figure).toBe('hunter')
+  expect(dbg.drawCalls).toBeLessThan(140)
+  const px = await page.evaluate(() => window.__arena.pixels())
+  expect(px.lit).toBeGreaterThan(0.8) // daylight
+  await step(page, 1200)
+  await page.screenshot({ path: `${SHOTS}arena-field.png` })
+  await page.evaluate(() => window.__arena.camera({ yaw: 155, pitch: 8, distance: 7 }))
+  await step(page, 100)
+  await page.screenshot({ path: `${SHOTS}arena-field-horizon.png` })
+  // The meadow is flat and its edges hold, though the land rolls on past them.
+  await page.evaluate(() => window.__arena.camera({ yaw: 0, pitch: 25, distance: 9 }))
+  await input(page, { x: 1, y: 0, view: { x: 0, z: -1 } })
+  const s = await step(page, 9000)
+  expect(s.player.grounded).toBe(true)
+  expect(s.player.pos.x).toBeGreaterThan(28)
+  expect(s.player.pos.x).toBeLessThan(30)
+})
+
+test('the Training Room: lit, with shadows and props', async ({ page }) => {
+  await page.goto('/arena?test=1&boss=0&room=training-room')
   await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 90_000 })
   await page.evaluate(() => window.__arena.dummy('idle'))
   const dbg = await page.evaluate(() => window.__arena.debug())
@@ -311,7 +334,7 @@ test('leaving the page frees the WebGL context, every visit', async ({ page }) =
 })
 
 test('real-time mode: no test hook, the clock runs, and the keyboard walks', async ({ page }) => {
-  await page.goto('/arena?boss=0')
+  await page.goto('/arena?boss=0&room=training-room') // the light room: real time on a CI box
   await expect(page.locator('canvas[data-arena="canvas"]')).toBeVisible()
   expect(await page.evaluate(() => window.__arena)).toBeUndefined()
 

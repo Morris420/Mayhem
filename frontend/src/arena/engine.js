@@ -169,7 +169,7 @@ export async function createArena(
   })
   const fighterIndex = Object.fromEntries(sim.fighters.map((f, i) => [f.id, i]))
 
-  const camera = new THREE.PerspectiveCamera(CAMERA.fov, 1, 0.1, 140)
+  const camera = new THREE.PerspectiveCamera(CAMERA.fov, 1, 0.1, room.far ?? 140)
 
   // Post-processing. The composer renders into its own target, which has no
   // anti-aliasing unless asked for: without `samples`, every thin bright edge
@@ -181,7 +181,7 @@ export async function createArena(
     new THREE.Vector2(256, 256),
     BLOOM.strength,
     BLOOM.radius,
-    BLOOM.threshold,
+    room.bloomThreshold ?? BLOOM.threshold,
   )
   composer.addPass(bloom)
   composer.addPass(new OutputPass())
@@ -438,7 +438,7 @@ export async function createArena(
     if (test) {
       // Test mode: draw the current state, never advance it. The ambient dust
       // is frozen at the simulation's time, so screenshots are reproducible.
-      roomScene.userData.update(sim.state().time)
+      roomScene.userData.update(sim.state().time, curr)
       draw(1, 0)
     } else {
       const steps = clock.advance(delta)
@@ -456,7 +456,7 @@ export async function createArena(
       for (let i = 0; i < steps; i++) stepOnce()
       flushEvents()
       animate(delta / 1000)
-      roomScene.userData.update(now / 1000)
+      roomScene.userData.update(now / 1000, curr)
       draw(clock.alpha(), delta / 1000)
     }
     pushHud(now)
@@ -485,7 +485,7 @@ export async function createArena(
         effects.update(STEP_S)
         vfxFrame(STEP_S)
       }
-      roomScene.userData.update(sim.state().time)
+      roomScene.userData.update(sim.state().time, curr)
       draw(1, 0)
       pushHud(performance.now(), true)
       return sim.state()

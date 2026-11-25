@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { roomBoxes } from './physics.js'
+import { buildField } from './field.js'
 
 export { roomBoxes }
 
@@ -329,7 +330,14 @@ export function buildRoomScene(room) {
     group.add(fill)
   }
 
-  group.userData.update = (t) => motes.userData.update(t)
+  // An open-air room: sky, hills, grass (field.js) instead of walls.
+  const field = room.field ? buildField(room) : null
+  if (field) group.add(field)
+  // fighters: [{x, y, z}] (their bodies' centres), so the grass can part round them.
+  group.userData.update = (t, fighters) => {
+    motes.userData.update(t)
+    field?.userData.update(t, fighters)
+  }
   return group
 }
 
