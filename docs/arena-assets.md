@@ -5,31 +5,38 @@ Every asset in the repo gets a line here: source, licence, what we changed. No e
 
 | File | Source | Licence | Changes |
 |---|---|---|---|
-| `frontend/public/models/arena/hunter.glb` | **KayKit Character Pack: Adventurers 1.0** by Kay Lousberg — `Rogue_Hooded.glb`, from github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 (also kaylousberg.itch.io/kaykit-adventurers) | **CC0 1.0** (public domain; credit optional: "Kay Lousberg, www.kaylousberg.com") | Kept 27 of 76 animation clips, redundant keyframes removed (glTF-Transform `resample`, `dedup`, `prune`): 3.5 MB → 2.5 MB (1.07 MB gzipped). Weapons hidden at runtime. Re-coloured at runtime in `figure.js` (toon shading, cyan outline) |
+| `frontend/public/models/arena/hunter.glb` | **Morrison's own hunter**: made in VRoid Studio, rigged and animated on Mixamo (Adobe), 14 FBX downloads (25 Nov) | Character: ours. Animations: Mixamo, royalty-free for use in games; the raw Mixamo FBX files may not be redistributed, so they stay **out of the repo** | Converted offline (scratch folder, not the repo): three.js `FBXLoader` → `GLTFExporter` in headless Chromium, every clip cut to the part we use and made in-place, stray Blender "Cube" removed, materials replaced by plain named ones (the FBX had no textures), then glTF-Transform `resample / dedup (no materials) / prune / weld / quantize`. 16 clips, 1.84 MB (≈870 KB gzipped). Coloured at runtime by material name in `figure.js` (toon shading, outline, glowing eyes; the dummy gets a crimson palette) |
+| `frontend/public/models/arena/dungeon-kit.glb` | **KayKit Dungeon Remastered** by Kay Lousberg, github.com/KayKit-Game-Assets (also kaylousberg.itch.io) | **CC0 1.0** (credit optional: "Kay Lousberg, www.kaylousberg.com") | 15 pieces merged into one file (one node per piece): floor_tile_large, floor_tile_large_rocks, wall, wall_arched, wall_cracked, wall_corner, pillar, pillar_decorated, torch_mounted, banner_patternA_blue, banner_thin_blue, rubble_large, rubble_half, barrel_large, crates_stacked. 353 KB. Placed by `rooms/training-hall.js` (`dress()`), drawn as instanced meshes |
 
-## Clips kept in `hunter.glb`
+## Clips in `hunter.glb`
 
-Movement: `Unarmed_Idle`, `Idle`, `Walking_A`, `Running_A`, `Running_B`, `Jump_Start`, `Jump_Idle`,
-`Jump_Land`, `Dodge_Forward/Backward/Left/Right`.
-Fighting (for the fighter kit): `Unarmed_Melee_Attack_Punch_A/B`, `Unarmed_Melee_Attack_Kick`,
-`1H_Melee_Attack_Slice_Diagonal`, `1H_Melee_Attack_Stab`, `Block`, `Blocking`, `Block_Hit`,
-`Hit_A`, `Hit_B`, `Death_A`, `Death_A_Pose`, `Spellcast_Raise`, `Spellcast_Shoot`, `Cheer`.
+| Clip | From (Mixamo) | Used for |
+|---|---|---|
+| `Idle` | Breathing Idle (0–4.5 s) | standing alone |
+| `FightIdle` | Bouncing Fight Idle | standing with someone within 6 m, guarding |
+| `Walk`, `Run` | Walking, Running | locomotion, blended by speed (stride 1.75 / 4.6 m/s) |
+| `Jump`, `JumpStanding` | Running Jump, Standing Jump | jumps, double-jump tumble |
+| `FallLand` | Falling To Landing | falling, landing |
+| `Roll` | Stand To Roll | the dash |
+| `HitHead`, `HitBody` | Big Hit To Head, Stomach Hit | hitstun, knockdown |
+| `Jab`, `Straight`, `Uppercut`, `Cross`, `BodyBlow` | cut from one Uppercut Jab flurry | light combo (jab → straight → uppercut), heavy, launcher |
+| `Emote` | Swing Dancing (0–6 s) | T |
 
-To get a dropped clip back: re-run the strip script with it added to the keep list. The script
-is short — glTF-Transform's `NodeIO`, dispose every animation not in the list, then
-`resample(), dedup(), prune()`.
+Not there yet (wanted): Knocked Down, Getting Up, Dying, Center Block, a kick or hook. Textures:
+the VRoid textures did not survive Mixamo; with the `.vrm` (or its texture PNGs) we can put them
+back.
 
-## Why this pack, and what else is out there
+## How to add a clip
 
-It is a placeholder that is good enough to play with, not the final hunter. Chosen because it is
-CC0, downloadable without a login (it is on GitHub), ships glTF that three.js loads directly, and
-its 76 animations already cover block, dodge, punches, kick, spellcast, hit and death — the whole
-fighter kit.
+1. Download from Mixamo as *FBX Binary, Without Skin, 30 fps* (In Place if offered).
+2. Add it to the converter's `PLAN` (name, file, start, end seconds) and rebuild; then run the
+   optimiser. Both scripts live outside the repo (they read Mixamo files).
+3. Map it in `figure.js` (`CLIPS`, `MOVE_CLIPS`, `IMPACT` for attacks: the fraction of the clip
+   where the fist lands).
 
-The alternatives, for when we want something more anime:
+## Arena presets
 
-- **Quaternius — Universal Animation Library 1 & 2 + Universal Base Characters** (CC0). Realistic
-  proportions; library 2 has 3- and 4-hit combos split per hit. Hosted on quaternius.com / itch.io,
-  which the Claude container cannot reach: download it yourself and drop the .glb in the repo.
-- **Mixamo** (free with an Adobe login, royalty-free). Huge library, any humanoid. Login needed.
-- **Our own code-built neon fighter**, as the original plan said. Most work, most "ours".
+Any glTF/GLB kit or scene works if it is CC0 or CC-BY (credit here), ideally under 10–15 MB.
+Collisions are **not** taken from the model: the room file (`src/arena/rooms/*.js`) lists the
+boxes you can stand on and bump into, and `dress()` places the pieces. That keeps the physics
+deterministic and cheap.

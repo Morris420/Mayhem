@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AchievementController;
+use App\Http\Controllers\ArenaController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BriefcaseController;
 use App\Http\Controllers\CalendarController;
@@ -29,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'show']);
     Route::get('/skills', [DashboardController::class, 'skills']);
+    Route::get('/arena/loadout', [ArenaController::class, 'loadout']);
     Route::get('/calendar', [CalendarController::class, 'show']);
 
     Route::get('/tasks', [TaskController::class, 'index']);

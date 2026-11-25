@@ -48,13 +48,19 @@ test('the arena loads and actually draws the neon room', async ({ page }) => {
     0.002,
   )
 
+  // Your stats from the server's loadout (a fresh hunter: base stats, no abilities yet).
+  await expect(page.getByTestId('loadout')).toContainText('ATK +0%')
+  await expect(page.getByTestId('loadout')).toContainText('HP 100')
+  await expect(page.getByTestId('loadout')).toContainText('Fire bolt')
+
   // The hunter model loaded (not the capsule fallback).
   const dbg = await page.evaluate(() => window.__arena.debug())
   expect(dbg.figure).toBe('hunter')
-  // Budget (playbook §6): room ~8 calls, the hunter's parts + their outlines ~22,
-  // the bloom passes ~12.
+  // Budget (playbook §6): room ~8 calls, bloom ~12, and per fighter one call per
+  // material (the VRoid hunter has 15) plus its outline. ~85 for two fighters;
+  // drops once textures arrive and parts can share one material.
   expect(dbg.drawCalls).toBeGreaterThan(5)
-  expect(dbg.drawCalls).toBeLessThan(70)
+  expect(dbg.drawCalls).toBeLessThan(120)
 })
 
 test('the capsule falls, walks and collides — through the test hook', async ({ page }) => {
@@ -106,7 +112,7 @@ test('sprint, jump and wall hug — and the hunter animates to match', async ({ 
   await openArena(page)
   const clip = () => page.evaluate(() => window.__arena.debug().clip)
   await step(page, 1000)
-  expect(await clip()).toBe('Unarmed_Idle')
+  expect(await clip()).toBe('Idle')
 
   // Sprint forward: faster than walking, and the sprint animation.
   let s = await page.evaluate(() => window.__arena.state())
@@ -115,14 +121,14 @@ test('sprint, jump and wall hug — and the hunter animates to match', async ({ 
   s = await step(page, 1000)
   expect(z0 - s.player.pos.z).toBeGreaterThan(7)
   expect(s.player.sprinting).toBe(true)
-  expect(await clip()).toBe('Running_B')
+  expect(await clip()).toBe('Run')
 
   // Jump: airborne, rising, jump animation; then lands again.
   await input(page, 'jump')
   s = await step(page, 200)
   expect(s.player.grounded).toBe(false)
   expect(s.player.jumps).toBe(1)
-  expect(await clip()).toBe('Jump_Idle')
+  expect(await clip()).toBe('JumpStanding')
   await input(page, 'stop')
   s = await step(page, 1200)
   expect(s.player.grounded).toBe(true)
@@ -323,7 +329,7 @@ test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({
     if (s.events.length) break
   }
   expect(s.events[0]?.type).toBe('hit')
-  await page.screenshot({ path: `${SHOTS}arena-m4-hit.png` })
+  await page.screenshot({ path: `${SHOTS}arena-a-hit.png` })
 
   // The dummy blocking a jab.
   await step(page, 1200)
@@ -331,7 +337,7 @@ test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({
   await step(page, 400)
   await input(page, 'light')
   await step(page, 150)
-  await page.screenshot({ path: `${SHOTS}arena-m4-block.png` })
+  await page.screenshot({ path: `${SHOTS}arena-a-block.png` })
   await page.evaluate(() => window.__arena.camera({ yaw: 0 }))
 
   // Running across the hall.
@@ -339,7 +345,7 @@ test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({
   await page.evaluate(() => window.__arena.teleport({ x: 6, y: 0.95, z: 12 }))
   await input(page, { x: -0.5, y: 1, sprint: true })
   await step(page, 900)
-  await page.screenshot({ path: `${SHOTS}arena-m4-run.png` })
+  await page.screenshot({ path: `${SHOTS}arena-a-run.png` })
 
   // Jump onto the low ledge (back-left).
   await page.evaluate(() => window.__arena.teleport({ x: -14, y: 0.95, z: -8 }))
@@ -347,7 +353,7 @@ test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({
   await step(page, 200)
   await input(page, 'jump')
   await step(page, 330)
-  await page.screenshot({ path: `${SHOTS}arena-m4-jump.png` })
+  await page.screenshot({ path: `${SHOTS}arena-a-jump.png` })
   // Double jump off the ledge.
   await input(page, 'jump')
   await step(page, 250)
@@ -360,7 +366,7 @@ test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({
   await input(page, 'jump')
   await step(page, 700)
   expect((await page.evaluate(() => window.__arena.state())).player.wall).not.toBeNull()
-  await page.screenshot({ path: `${SHOTS}arena-m4-wall.png` })
+  await page.screenshot({ path: `${SHOTS}arena-a-wall.png` })
 })
 
 test.describe('phone (390 px)', () => {
@@ -376,7 +382,7 @@ test.describe('phone (390 px)', () => {
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       )
       expect(overflow).toBeLessThanOrEqual(0)
-      if (path.startsWith('/arena')) await page.screenshot({ path: `${SHOTS}arena-m4-phone.png` })
+      if (path.startsWith('/arena')) await page.screenshot({ path: `${SHOTS}arena-a-phone.png` })
     })
   }
 })

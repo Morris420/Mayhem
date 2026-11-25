@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
 import { createArena } from '@/arena/engine'
+import { useArenaStore } from '@/stores/arena'
 
 // The arena page. Vue owns the frame around the game and the HUD; the game itself
 // runs in plain JS (src/arena/) and pushes its state here a few times a second.
@@ -16,11 +17,22 @@ const hud = shallowRef(null)
 
 let arena = null
 let alive = true
+const store = useArenaStore()
+const loadout = shallowRef(null)
 
 onMounted(async () => {
   try {
+    // Your fighter's stats come from your skills, computed by the server. If that
+    // fails the arena still opens, with base stats.
+    try {
+      loadout.value = await store.load()
+    } catch (e) {
+      console.warn('[arena] loadout unavailable, using base stats', e)
+    }
+    if (!alive) return
     const created = await createArena(host.value, {
       test: testMode,
+      loadout: loadout.value,
       onHud: (s) => (hud.value = s),
     })
     // The user may have left the page while the physics was still loading.
@@ -51,6 +63,8 @@ const motion = (p) => {
   if (p.combat && p.combat !== 'free') return p.combat
   return p.wall ? 'wall' : !p.grounded ? 'airborne' : p.sprinting ? 'sprinting' : 'grounded'
 }
+// "+6%" style, from a multiplier.
+const bonus = (m) => `${m >= 1 ? '+' : ''}${Math.round((m - 1) * 100)}%`
 const pct = (f) => `${Math.round((100 * f.hp) / f.maxHp)}%`
 const guardPct = (f) => `${Math.round((100 * f.guard) / f.guardMax)}%`
 
@@ -134,6 +148,36 @@ const fmt = (n) => {
       </div>
 
       <div
+        v-if="loadout"
+        data-testid="loadout"
+        class="pointer-events-none absolute left-3 top-[3.4rem] flex flex-wrap items-center gap-1.5 text-[10px] font-semibold tracking-wider"
+      >
+        <span class="rounded bg-black/50 px-1.5 py-0.5 text-cyan-200/90"
+          >ATK {{ bonus(loadout.stats.damage) }}</span
+        >
+        <span class="rounded bg-black/50 px-1.5 py-0.5 text-cyan-200/90"
+          >HP {{ loadout.maxHp }}</span
+        >
+        <span class="rounded bg-black/50 px-1.5 py-0.5 text-cyan-200/90"
+          >GUARD {{ loadout.maxGuard }}</span
+        >
+        <span
+          v-for="a in loadout.abilities"
+          :key="a.slug"
+          class="rounded px-1.5 py-0.5"
+          :class="a.unlocked ? 'bg-cyan-500/20 text-cyan-200' : 'bg-black/40 text-slate-500'"
+          :title="
+            a.unlocked
+              ? a.live
+                ? 'Unlocked'
+                : 'Unlocked — coming soon'
+              : `Needs ${a.skill} ${a.level}`
+          "
+          >{{ a.name }}{{ a.unlocked ? '' : ` · ${a.skill} ${a.level}` }}</span
+        >
+      </div>
+
+      <div
         v-if="hud.combo >= 2"
         data-testid="combo"
         class="pointer-events-none absolute left-4 top-1/3 text-3xl font-black italic tracking-wide text-amber-300 drop-shadow-[0_0_12px_rgba(251,191,36,0.6)]"
@@ -142,7 +186,7 @@ const fmt = (n) => {
       </div>
 
       <div
-        class="pointer-events-none absolute left-3 top-[4.5rem] rounded-lg border border-cyan-900/60 bg-black/50 px-3 py-1.5 font-mono text-[11px] leading-5 text-cyan-200/90 backdrop-blur-sm"
+        class="pointer-events-none absolute left-3 top-[5.2rem] rounded-lg border border-cyan-900/60 bg-black/50 px-3 py-1.5 font-mono text-[11px] leading-5 text-cyan-200/90 backdrop-blur-sm"
       >
         <div data-testid="arena-pos">
           pos {{ fmt(hud.player.pos.x) }} {{ fmt(hud.player.pos.y) }} {{ fmt(hud.player.pos.z) }}
@@ -162,7 +206,8 @@ const fmt = (n) => {
         <span class="font-mono text-cyan-300">C</span> dash ·
         <span class="font-mono text-cyan-300">Left click</span> punch (×3 = jab, cross, uppercut) ·
         <span class="font-mono text-cyan-300">Right click</span> heavy ·
-        <span class="font-mono text-cyan-300">F</span> guard (hold)
+        <span class="font-mono text-cyan-300">F</span> guard (hold) ·
+        <span class="font-mono text-cyan-300">T</span> emote
       </div>
     </template>
   </section>

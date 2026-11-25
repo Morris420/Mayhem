@@ -149,6 +149,7 @@ export const COMBAT = {
   hitHeight: 1.1, // vertical tolerance of a hit around the target's centre
   inputBuffer: 8, // frames an attack press is remembered (during hitstop it waits)
   // The guard meter: blocking costs it, it refills when you stop blocking.
+  emoteFrames: 360, // an emote lasts at most this long; any input ends it
   guardMax: 100,
   guardHoldDrain: 4, // per second just for holding block
   guardRegen: 15, // per second once you have stopped blocking...

@@ -45,6 +45,7 @@ const idle = () => ({
   heavyPressed: false,
   block: false,
   dashPressed: false,
+  emotePressed: false,
 })
 
 // One step of thinking. Returns this step's controls for `self`.

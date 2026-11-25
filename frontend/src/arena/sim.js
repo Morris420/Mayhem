@@ -40,14 +40,22 @@ export function stickToWorld(stick, view = { x: 0, z: -1 }) {
   }
 }
 
-const BUTTONS = ['jump', 'light', 'heavy', 'block', 'dash']
+const BUTTONS = ['jump', 'light', 'heavy', 'block', 'dash', 'emote']
 const clone = (o) => JSON.parse(JSON.stringify(o))
 
 // options.dummy: 'auto' | 'idle' | 'block' | 'attack' | 'none' (no dummy at all)
-export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
+// options.loadout: the player's stats from /api/arena/loadout (null = base stats).
+export function createSimulation(room, { seed = 1, dummy = 'none', loadout = null } = {}) {
   const world = createCollisionWorld(room)
   const fighters = [
-    createFighter(world, { id: 'player', spawn: room.spawn, facing: { x: 0, z: -1 } }),
+    createFighter(world, {
+      id: 'player',
+      spawn: room.spawn,
+      facing: { x: 0, z: -1 },
+      stats: loadout
+        ? { maxHp: loadout.maxHp, maxGuard: loadout.maxGuard, damage: loadout.stats?.damage }
+        : null,
+    }),
   ]
   if (dummy !== 'none' && room.dummySpawn) {
     fighters.push(
@@ -71,16 +79,17 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
     heavy: false,
     block: false,
     dash: false,
+    emote: false,
     view: { x: 0, z: -1 }, // the camera direction the stick is relative to
   }
-  const wasHeld = { jump: false, light: false, heavy: false, dash: false }
-  const queued = { jump: false, light: false, heavy: false, dash: false } // press() taps
+  const wasHeld = { jump: false, light: false, heavy: false, dash: false, emote: false }
+  const queued = { jump: false, light: false, heavy: false, dash: false, emote: false } // press() taps
   let pressHolding = false // a press('jump') counts as held until the jump peaks
   let events = []
 
   function heroControls() {
     const pressed = {}
-    for (const b of ['jump', 'light', 'heavy', 'dash']) {
+    for (const b of ['jump', 'light', 'heavy', 'dash', 'emote']) {
       pressed[b] = (input[b] && !wasHeld[b]) || queued[b]
       wasHeld[b] = input[b]
     }
@@ -97,6 +106,7 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
       heavyPressed: pressed.heavy,
       block: input.block,
       dashPressed: pressed.dash,
+      emotePressed: pressed.emote,
     }
   }
 
@@ -134,7 +144,7 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
     for (const b of BUTTONS) if (b in next) input[b] = !!next[b]
   }
 
-  // A tap of one button on the next step: 'jump' | 'light' | 'heavy' | 'dash'.
+  // A tap of one button on the next step: 'jump' | 'light' | 'heavy' | 'dash' | 'emote'.
   // A tapped jump is a full jump (held until it peaks); for a short hop, hold
   // jump via setInput and release it early instead.
   function press(button) {

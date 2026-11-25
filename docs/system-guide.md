@@ -452,12 +452,12 @@ A 3D fighting game on its own page, where the nine skills become combat stats. B
 three.js (rendering) and our own deterministic physics, loaded only when you open `/arena`. The plan is in
 `docs/arena-design.md`, the implementation brief in `docs/arena-playbook.md`.
 
-**Done so far (M1, M2, M2b):** a dark Training Hall with neon trim and ledges, and a hooded
-hunter (a CC0 model, placeholder) you move with WASD, sprint with Shift and jump with Space; in
+**Done so far (M1, M2, M2b):** a torch-lit dungeon arena (KayKit Dungeon, CC0) with ledges, and
+Morrison's own VRoid/Mixamo hunter you move with WASD, sprint with Shift and jump with Space; in
 mid-air you can cling to a wall and kick off it. Space again in the air is a double jump. You look
 around with the mouse (click the arena to capture it) and fight with left click (light: jab,
 cross, uppercut), right click (heavy), F (hold to guard: a shield sphere that shrinks as the
-guard meter drains, and breaks at zero) and C (dash), against a training dummy that wanders,
+guard meter drains, and breaks at zero) and C (dash), T is an emote. Your stats come from your skills (`GET /api/arena/loadout`, `app/Support/Arena/`) and show under your health bar. You fight a training dummy that wanders,
 attacks, blocks and dashes on the same rules. The plan to finish it is
 `docs/arena-build-guide.md`. The game runs on a fixed
 1/60 s step in plain JavaScript (`src/arena/`) on our own deterministic physics, so the same

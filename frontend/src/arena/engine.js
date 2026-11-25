@@ -16,7 +16,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 
 import defaultRoom from './rooms/training-hall.js'
-import { buildRoomScene } from './world.js'
+import { buildRoomScene, loadRoomDressing } from './world.js'
 import { createSimulation } from './sim.js'
 import {
   createCapsuleFigure,
@@ -57,9 +57,6 @@ export const CAMERA = {
 // of the room glow.
 export const BLOOM = { strength: 0.55, radius: 0.45, threshold: 0.22 }
 
-// The dummy's look: red outline, reddish body.
-const DUMMY_TINT = [0.95, 0.7, 0.72]
-
 // How often the Vue HUD is told about the game. Vue never runs inside the frame loop.
 const HUD_INTERVAL_MS = 100
 
@@ -77,7 +74,14 @@ function disposeTree(root) {
 
 export async function createArena(
   container,
-  { room = defaultRoom, test = false, seed = 1, dummy = 'auto', onHud = () => {} } = {},
+  {
+    room = defaultRoom,
+    test = false,
+    seed = 1,
+    dummy = 'auto',
+    loadout = null,
+    onHud = () => {},
+  } = {},
 ) {
   // --- renderer -------------------------------------------------------------
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
@@ -103,25 +107,26 @@ export async function createArena(
   const effects = createEffects(scene)
 
   // --- simulation -----------------------------------------------------------
-  const sim = createSimulation(room, { seed, dummy })
+  const sim = createSimulation(room, { seed, dummy, loadout })
   // Keyboard on the window, mouse on the canvas (pointer lock needs an element).
   const keyboard = test ? null : createControls(window, renderer.domElement)
   const clock = createFixedStep()
 
   // --- fighters' looks: one model, a clone per fighter -------------------------
   setShadowBlocks(room.blocks)
-  let gltf = null
-  try {
-    gltf = await loadHunterAsset()
-  } catch (e) {
-    // The game still works without the model: fall back to M1's capsule.
-    console.warn('[arena] hunter model failed to load, using capsules', e)
-  }
+  // The hunter and the room's kit load in parallel. Either may fail without
+  // stopping the game: capsules instead of the hunter, the bare room instead of
+  // the kit.
+  const [hunter, dressing] = await Promise.allSettled([loadHunterAsset(), loadRoomDressing(room)])
+  const gltf = hunter.status === 'fulfilled' ? hunter.value : null
+  if (!gltf) console.warn('[arena] hunter model failed to load, using capsules', hunter.reason)
+  if (dressing.status === 'fulfilled') scene.add(dressing.value)
+  else console.warn('[arena] room kit failed to load, using the bare room', dressing.reason)
   const figures = sim.fighters.map((f) => {
     const isDummy = f.id === 'dummy'
     const edge = isDummy ? room.colors.enemy : room.colors.trim
     const fig = gltf
-      ? createHunterFigure(gltf, isDummy ? { edge, tint: DUMMY_TINT } : { edge })
+      ? createHunterFigure(gltf, { edge, palette: isDummy ? 'enemy' : 'hero' })
       : createCapsuleFigure({ edge })
     scene.add(fig.object)
     return fig
@@ -268,10 +273,18 @@ export async function createArena(
     composer.render()
   }
 
+  // Within this distance fighters take their fight stance instead of idling.
+  const STANCE_RANGE = 6
   function animate(dt) {
     const st = sim.state()
-    figures[0].update(st.player, dt)
-    if (figures[1] && st.dummy) figures[1].update(st.dummy, dt)
+    let near = false
+    if (st.dummy) {
+      const dx = st.dummy.pos.x - st.player.pos.x
+      const dz = st.dummy.pos.z - st.player.pos.z
+      near = dx * dx + dz * dz < STANCE_RANGE * STANCE_RANGE && st.dummy.combat !== 'ko'
+    }
+    figures[0].update(st.player, dt, { near })
+    if (figures[1] && st.dummy) figures[1].update(st.dummy, dt, { near })
   }
 
   // --- HUD ------------------------------------------------------------------
@@ -326,7 +339,7 @@ export async function createArena(
   // --- test hook --------------------------------------------------------------
   // Exposed as window.__arena by ArenaView when the page is opened with ?test=1.
   // Shape agreed in arena-playbook §2.
-  const BUTTONS = ['jump', 'light', 'heavy', 'dash']
+  const BUTTONS = ['jump', 'light', 'heavy', 'dash', 'emote']
   const testHook = {
     ready: true,
     figure: figures[0].kind,

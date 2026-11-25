@@ -99,7 +99,7 @@ is then not needed; recreate the toon look and outline in `figure.js` as now.
 
 Each has what to build and what "done" means.
 
-### A. The real hunter (VRoid + Mixamo)
+### A. The real hunter (VRoid + Mixamo) — DONE 25 Nov (textures and a few clips still to come; docs/arena-assets.md)
 
 Morrison makes an original Solo-Leveling-*inspired* hunter in **VRoid Studio** (free) and
 exports **VRM 1.0** (reduce polygons on, 2048 texture atlas). He downloads **Mixamo** clips as
@@ -134,7 +134,7 @@ hitstop, pushback, guard drain/regen, the dummy's aggression. Only numbers chang
 Add: a short "Fight!" / "K.O." banner, three generated sounds (hit, block, guard break — tiny
 WebAudio synths, no files), dash and double-jump trails.
 
-### C. Stats and abilities from the skills (server)
+### C. Stats and abilities from the skills (server) — backend + HUD DONE 25 Nov; Fire bolt still to do
 
 - Backend: `app/Support/Arena/ArenaRules.php` (every balance constant), `Loadout.php`
   (skills → stats). **Decided: skills matter only a little** — e.g. damage ±15%, health

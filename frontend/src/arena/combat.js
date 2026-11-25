@@ -9,6 +9,7 @@
 //   block      holding block: no damage from the front
 //   blockstun  just blocked a hit, can't act for a moment
 //   guardbreak the guard meter ran out: stunned and wide open
+//   emote      showing off (T); any input ends it
 //   hitstun    just got hit, can't act (this is what makes combos possible)
 //   dash       a quick burst; the first frames dodge everything
 //   down       knocked off their feet
@@ -20,12 +21,17 @@ import { COMBAT, MOVES, moveFrames } from './moves.js'
 
 const UNHITTABLE = new Set(['down', 'getup', 'ko'])
 
-export function createFighter(world, { id, spawn, facing = { x: 0, z: -1 } }) {
+// stats (optional, from the server's loadout): { maxHp, maxGuard, damage } where
+// damage is a multiplier. They are inputs to the simulation, never computed in it.
+export function createFighter(world, { id, spawn, facing = { x: 0, z: -1 }, stats = null }) {
+  const maxHp = Math.max(1, Math.round(stats?.maxHp ?? COMBAT.maxHp))
+  const maxGuard = Math.max(1, Math.round(stats?.maxGuard ?? COMBAT.guardMax))
   const body = createPlayer(world, spawn)
   body.state.facing = { x: facing.x, z: facing.z }
   const c = {
-    hp: COMBAT.maxHp,
-    maxHp: COMBAT.maxHp,
+    hp: maxHp,
+    maxHp,
+    damage: stats?.damage ?? 1, // damage multiplier
     state: 'free',
     timer: 0, // frames left in hitstun / blockstun / dash / down / getup / ko
     move: null, // id in MOVES while attacking
@@ -37,8 +43,8 @@ export function createFighter(world, { id, spawn, facing = { x: 0, z: -1 } }) {
     invuln: 0, // frames nothing can hit you
     dashCd: 0, // frames before you can dash again
     juggle: 0, // hits taken since you last recovered (the combo counter)
-    guard: COMBAT.guardMax, // the guard meter: blocking drains it, it refills when you stop
-    guardMax: COMBAT.guardMax,
+    guard: maxGuard, // the guard meter: blocking drains it, it refills when you stop
+    guardMax: maxGuard,
     guardDelay: 0, // frames before the guard starts refilling
     buf: null, // a recent attack press not used yet: 'light' | 'heavy'
     bufFrames: 0, // ...and how many more frames it stays valid
@@ -209,6 +215,17 @@ export function stepFighter(f, ctl, fighters, dt) {
         c.juggle = 0
       }
       break
+    case 'emote': {
+      const acting =
+        ctl.mx * ctl.mx + ctl.mz * ctl.mz > 0.01 ||
+        ctl.lightPressed ||
+        ctl.heavyPressed ||
+        ctl.dashPressed ||
+        ctl.jumpPressed ||
+        ctl.block
+      if (acting || --c.timer <= 0) c.state = 'free'
+      break
+    }
     case 'block':
       if (c.guard <= 0) breakGuard(f)
       else if (!ctl.block) c.state = 'free'
@@ -249,6 +266,10 @@ export function stepFighter(f, ctl, fighters, dt) {
       useBuffer()
       startMove(f, 'H', opp)
     } else if (ctl.block && s.grounded && canGuard) c.state = 'block'
+    else if (ctl.emotePressed && s.grounded && ctl.mx * ctl.mx + ctl.mz * ctl.mz < 0.01) {
+      c.state = 'emote'
+      c.timer = COMBAT.emoteFrames
+    }
   }
 
   // --- what the body may do in this state ---
@@ -349,7 +370,8 @@ export function resolveHits(fighters) {
           type = 'block'
         }
       } else {
-        tc.hp = Math.max(0, tc.hp - m.damage)
+        const dealt = Math.round(m.damage * c.damage)
+        tc.hp = Math.max(0, tc.hp - dealt)
         tc.juggle =
           tc.state === 'hitstun' || tc.state === 'down' || tc.state === 'guardbreak'
             ? tc.juggle + 1
@@ -377,7 +399,7 @@ export function resolveHits(fighters) {
         attacker: a.id,
         target: t.id,
         move: c.move,
-        damage: blocked ? 0 : m.damage,
+        damage: blocked ? 0 : Math.round(m.damage * c.damage),
         combo: blocked ? 0 : tc.juggle,
         guard: tc.guard,
         heavy: m.hitstop >= 9,

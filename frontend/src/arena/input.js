@@ -6,6 +6,7 @@
 //                  Esc lets go). Wheel = zoom.
 //   Left click     light attack (J)                  Right click  heavy attack (K)
 //   F (or L)       block, hold                       C            dash
+//   T              emote
 //
 // Only the engine's real-time mode listens. In test mode input is ignored
 // entirely, so a stray key press can never make a test flaky. Controllers (Xbox,
@@ -28,16 +29,17 @@ const KEYS = {
   KeyF: 'block',
   KeyL: 'block',
   KeyC: 'dash',
+  KeyT: 'emote',
 }
 
 // Buttons where a tap matters (as opposed to holding).
-const TAPS = ['jump', 'light', 'heavy', 'dash']
+const TAPS = ['jump', 'light', 'heavy', 'dash', 'emote']
 const MOUSE_BUTTONS = { 0: 'light', 2: 'heavy' }
 
 export function createControls(target = window, surface = null) {
   const held = new Set()
   // A tap pressed and released between two reads still counts once.
-  const tapped = { jump: false, light: false, heavy: false, dash: false }
+  const tapped = { jump: false, light: false, heavy: false, dash: false, emote: false }
   // Mouse movement since the last look() read.
   const look = { dx: 0, dy: 0, wheel: 0 }
   const locked = () => surface && document.pointerLockElement === surface

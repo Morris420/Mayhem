@@ -111,13 +111,52 @@ export function createCapsuleFigure({ edge = '#22d3ee' } = {}) {
 }
 
 // --- the hunter --------------------------------------------------------------
+// Morrison's VRoid hunter, rigged and animated on Mixamo, converted into one
+// file (see docs/arena-assets.md). The export carries no textures yet, so each
+// part is coloured by its material name: a dark coat, dark hair, and eyes that
+// glow (the bloom pass picks them up). The dummy gets the same body in crimson.
 
-// Props the Rogue carries that the arena doesn't use (yet).
-const HIDDEN_NODES = ['Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Knife', 'Throwable']
+export const PALETTES = {
+  hero: {
+    hair: '#343a4c',
+    skin: '#f0d2bd',
+    eye: '#2f8cff',
+    coat: '#2b3242',
+    coat2: '#3d4760',
+    accent: '#17a9bd',
+    pants: '#232836',
+    shoes: '#161820',
+  },
+  enemy: {
+    hair: '#4a2026',
+    skin: '#e2bba5',
+    eye: '#ff2d4b',
+    coat: '#4a1e27',
+    coat2: '#632a35',
+    accent: '#e0435a',
+    pants: '#2e161b',
+    shoes: '#1a1012',
+  },
+}
+
+// Which colour a material gets, from its VRoid name.
+function partLook(name, pal) {
+  if (/EyeIris/.test(name)) return { color: pal.eye, glow: 2.2 }
+  if (/EyeHighlight/.test(name)) return { color: '#ffffff', glow: 1.5 }
+  if (/EyeWhite/.test(name)) return { color: '#e8edf5' }
+  if (/FaceBrow|FaceEyeline|FaceMouth/.test(name)) return { color: '#2b2226' }
+  if (/SKIN/.test(name)) return { color: pal.skin }
+  if (/HAIR/.test(name)) return { color: pal.hair }
+  if (/Tops_01_CLOTH_02/.test(name)) return { color: pal.coat2 }
+  if (/Tie/.test(name)) return { color: pal.accent, glow: 0.35 }
+  if (/Bottoms/.test(name)) return { color: pal.pants }
+  if (/Shoes/.test(name)) return { color: pal.shoes }
+  return { color: pal.coat }
+}
 
 // Three light bands instead of smooth shading: the anime look.
 function toonRamp() {
-  const data = new Uint8Array([40, 40, 40, 255, 120, 120, 120, 255, 255, 255, 255, 255])
+  const data = new Uint8Array([70, 70, 70, 255, 150, 150, 150, 255, 255, 255, 255, 255])
   const tex = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat)
   tex.minFilter = tex.magFilter = THREE.NearestFilter
   tex.generateMipmaps = false
@@ -141,89 +180,96 @@ function outlineMaterial(color, width) {
 
 // --- animation ----------------------------------------------------------------
 
-// Locomotion clips, blended by speed so walking speeds up into a jog, a run and a
-// sprint without a visible switch. Swap these names for Mixamo ones later.
-export const LOCO = {
-  idle: 'Unarmed_Idle',
-  walk: 'Walking_A',
-  run: 'Running_A',
-  sprint: 'Running_B',
+// The clips in hunter.glb (names given at conversion).
+export const CLIPS = {
+  idle: 'Idle', // breathing, when nobody is near
+  fightIdle: 'FightIdle', // bouncing guard, when an opponent is near
+  walk: 'Walk',
+  run: 'Run',
+  jump: 'JumpStanding',
+  fallLand: 'FallLand',
+  roll: 'Roll',
+  hitHead: 'HitHead',
+  hitBody: 'HitBody',
+  emote: 'Emote',
 }
 // One clip per move. Attacks are *scrubbed*: the pose is computed from the move's
 // frame, so the strike lands exactly on the active frames and freezes in hitstop.
 export const MOVE_CLIPS = {
-  L1: 'Unarmed_Melee_Attack_Punch_A',
-  L2: 'Unarmed_Melee_Attack_Punch_B',
-  L3: '1H_Melee_Attack_Slice_Diagonal', // closest to an uppercut in this pack; Mixamo has a real one
-  LH: 'Unarmed_Melee_Attack_Kick',
-  H: '1H_Melee_Attack_Stab',
-  AIR: 'Unarmed_Melee_Attack_Kick',
+  L1: 'Jab', // left jab
+  L2: 'Straight', // right straight
+  L3: 'Uppercut', // left uppercut, from below
+  H: 'Cross', // big right cross
+  LH: 'BodyBlow', // right body shot
+  AIR: 'Jab',
 }
+// Where in each attack clip the fist is fully out (0..1), measured by tracking
+// the hands frame by frame during conversion.
+export const IMPACT = { Jab: 0.37, Straight: 0.39, Uppercut: 0.51, Cross: 0.42, BodyBlow: 0.24 }
+// How fast the clips travel at playback speed 1 (from their root motion), so the
+// feet match the ground speed and never slide.
+const STRIDE = { walk: 1.75, run: 4.6 } // m/s
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
 
-// Blend weights for the four locomotion clips at a given speed (m/s).
+// Blend weights for idle / walk / run at a given speed (m/s). Sprinting is the
+// run clip played faster.
 export function locoWeights(speed) {
   const w = {
     idle: clamp01(1 - speed / 0.8),
-    walk: speed <= 2 ? clamp01(speed / 0.8) : clamp01((3.5 - speed) / 1.5),
-    run: speed < 2 ? 0 : speed <= 5.2 ? clamp01((speed - 2) / 1.5) : clamp01((7.5 - speed) / 2.3),
-    sprint: clamp01((speed - 5.5) / 2.5),
+    walk: speed <= 2 ? clamp01(speed / 0.8) : clamp01((3.8 - speed) / 1.8),
+    run: clamp01((speed - 2) / 1.8),
   }
-  const sum = w.idle + w.walk + w.run + w.sprint || 1
+  const sum = w.idle + w.walk + w.run || 1
   for (const k in w) w[k] /= sum
   return w
 }
 
 // Where in an attack clip to be at a given move frame: wind-up over the startup,
-// the strike over the active frames, follow-through over the recovery. The clip's
-// own impact moment is roughly 40-55% through, which is where active lands.
-function attackProgress(m, frame) {
-  if (frame <= m.startup) return 0.4 * (frame / m.startup)
-  if (frame <= m.startup + m.active) return 0.4 + 0.15 * ((frame - m.startup) / m.active)
-  return 0.55 + 0.45 * clamp01((frame - m.startup - m.active) / m.recovery)
+// the strike over the active frames, follow-through over the recovery.
+function attackProgress(m, frame, impact) {
+  if (frame <= m.startup) return impact * (frame / m.startup)
+  if (frame <= m.startup + m.active) return impact + 0.1 * ((frame - m.startup) / m.active)
+  return impact + 0.1 + (0.9 - impact) * clamp01((frame - m.startup - m.active) / m.recovery)
 }
 
 // The non-locomotion clip a fighter state calls for: [name, progress 0..1] for a
 // scrubbed clip, [name, 'loop'] for one that plays by itself, or null = locomotion.
-export function overrideClip(p, landing) {
+// ctx: { landing (s left), sinceDouble (s since a double jump), near (bool) }
+export function overrideClip(p, ctx = {}) {
   switch (p.combat) {
     case 'attack': {
-      const m = MOVES[p.move]
-      return [MOVE_CLIPS[p.move], attackProgress(m, p.moveFrame)]
+      const name = MOVE_CLIPS[p.move]
+      return [name, attackProgress(MOVES[p.move], p.moveFrame, IMPACT[name] ?? 0.4)]
     }
     case 'block':
-      return ['Blocking', 'loop']
+      return [CLIPS.fightIdle, 0.08] // guard up, held still
     case 'blockstun':
-      return ['Block_Hit', clamp01(1 - p.timer / 14)]
-    case 'guardbreak':
-      return ['Hit_B', clamp01(1 - p.timer / COMBAT.guardBreakFrames) * 0.7]
+      return [CLIPS.hitBody, clamp01(1 - p.timer / 14) * 0.3]
     case 'hitstun':
-      return [p.juggle % 2 ? 'Hit_A' : 'Hit_B', clamp01(1 - p.timer / 20)]
+      return [p.juggle % 2 ? CLIPS.hitHead : CLIPS.hitBody, clamp01(1 - p.timer / 20) * 0.7]
+    case 'guardbreak':
+      return [CLIPS.hitHead, clamp01(1 - p.timer / COMBAT.guardBreakFrames)]
     case 'down':
-      return ['Death_A', clamp01((COMBAT.knockdownFrames - p.timer) / 25)]
-    case 'getup':
-      return ['Death_A', clamp01(p.timer / COMBAT.getupFrames)] // the fall, played backwards
     case 'ko':
-      return ['Death_A', clamp01((COMBAT.koFrames - p.timer) / 30)]
-    case 'dash': {
-      // Which way relative to where you face.
-      const f = p.facing
-      const fwd = p.vel.x * f.x + p.vel.z * f.z
-      const right = p.vel.x * -f.z + p.vel.z * f.x
-      const name =
-        Math.abs(fwd) >= Math.abs(right)
-          ? fwd >= 0
-            ? 'Dodge_Forward'
-            : 'Dodge_Backward'
-          : right >= 0
-            ? 'Dodge_Right'
-            : 'Dodge_Left'
-      return [name, clamp01((COMBAT.dashFrames - p.timer) / COMBAT.dashFrames)]
-    }
+      return [CLIPS.hitHead, clamp01((COMBAT.knockdownFrames - p.timer) / 30)]
+    case 'getup':
+      return [CLIPS.fallLand, 0.7 + 0.3 * clamp01(1 - p.timer / COMBAT.getupFrames)]
+    case 'dash':
+      // The tumbling middle of the roll, played over the dash.
+      return [CLIPS.roll, 0.4 + 0.34 * clamp01((COMBAT.dashFrames - p.timer) / COMBAT.dashFrames)]
+    case 'emote':
+      return [CLIPS.emote, 'loop']
   }
-  if (p.wall || !p.grounded) return ['Jump_Idle', 'loop']
-  if (landing > 0) return ['Jump_Land', clamp01(1 - landing / 0.22) * 0.6]
+  if (p.wall) return [CLIPS.jump, 0.62]
+  if (!p.grounded) {
+    // Double jump: a quick tumble.
+    if (ctx.sinceDouble < 0.4) return [CLIPS.roll, 0.42 + 0.3 * (ctx.sinceDouble / 0.4)]
+    // Rising: tuck up towards the top of the jump; falling: reach for the floor.
+    if (p.vel.y > 0) return [CLIPS.jump, 0.28 + 0.2 * clamp01(1 - p.vel.y / 9)]
+    return [CLIPS.jump, 0.48 + 0.2 * clamp01(-p.vel.y / 10)]
+  }
+  if (ctx.landing > 0) return [CLIPS.fallLand, 0.75 + 0.25 * clamp01(1 - ctx.landing / 0.25)]
   return null
 }
 
@@ -232,13 +278,10 @@ export function loadHunterAsset(url = HUNTER_URL) {
   return new GLTFLoader().loadAsync(url)
 }
 
-// edge = outline colour, tint = body colour multiplier (the dummy is reddish).
-export function createHunterFigure(gltf, { edge = '#22d3ee', tint = [0.78, 0.82, 0.95] } = {}) {
+// edge = outline colour, palette = 'hero' | 'enemy'.
+export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } = {}) {
+  const pal = PALETTES[palette] ?? PALETTES.hero
   const model = cloneSkinned(gltf.scene)
-  for (const name of HIDDEN_NODES) {
-    const n = model.getObjectByName(name)
-    if (n) n.visible = false
-  }
 
   // Fit the model to the body's height (1.8 m), feet at its origin.
   model.updateMatrixWorld(true)
@@ -247,24 +290,44 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', tint = [0.78, 0.82,
   model.scale.setScalar(scale)
   model.position.y = -box.min.y * scale
 
-  // Toon body with the original colours, tinted, plus the outline.
+  // Toon materials by part, plus the outline.
   const ramp = toonRamp()
-  const outline = outlineMaterial(new THREE.Color(edge), 0.018 / scale)
+  const OUTLINE_M = 0.006 // outline thickness in metres
+  const made = []
   const shells = []
+  model.updateMatrixWorld(true)
   model.traverse((o) => {
     if (!o.isMesh) return
-    const src = o.material
-    o.material = new THREE.MeshToonMaterial({
-      map: src.map ?? null,
-      color: new THREE.Color(...tint),
-      emissive: new THREE.Color(0.02, 0.05, 0.07), // never fully black in the dark
-      gradientMap: ramp,
-    })
-    // Skinned meshes need a skinned twin for the outline, bound to the same skeleton.
+    // The file stores vertices in compressed units (quantized), so "1.2 cm" has
+    // to be converted into each mesh's own units: compare its size in its own
+    // space with its size in the world.
+    o.geometry.computeBoundingBox()
+    const own = o.geometry.boundingBox.getSize(new THREE.Vector3()).length()
+    const world = new THREE.Box3().setFromObject(o, true).getSize(new THREE.Vector3()).length()
+    const outline = outlineMaterial(
+      new THREE.Color(edge).multiplyScalar(0.6), // softer than the trim: less bloom
+      (OUTLINE_M * own) / (world || 1),
+    )
+    made.push(outline)
+    const toon = (src) => {
+      const look = partLook(src.name ?? '', pal)
+      const m = new THREE.MeshToonMaterial({
+        name: src.name,
+        color: new THREE.Color(look.color),
+        // A little self-light so the body reads in the dark room; eyes glow.
+        emissive: new THREE.Color(look.color).multiplyScalar(look.glow ?? 0.18),
+        gradientMap: ramp,
+      })
+      made.push(m)
+      return m
+    }
+    o.material = Array.isArray(o.material) ? o.material.map(toon) : toon(o.material)
+    o.frustumCulled = false // skinned bounds don't follow the animation
     const shell = o.isSkinnedMesh
       ? new THREE.SkinnedMesh(o.geometry, outline)
       : new THREE.Mesh(o.geometry, outline)
     if (o.isSkinnedMesh) shell.bind(o.skeleton, o.bindMatrix)
+    shell.frustumCulled = false
     shell.name = `${o.name}-outline`
     shells.push([o, shell])
   })
@@ -272,7 +335,6 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', tint = [0.78, 0.82,
     shell.position.copy(o.position)
     shell.quaternion.copy(o.quaternion)
     shell.scale.copy(o.scale)
-    shell.visible = o.visible && o.parent?.visible !== false
     o.parent.add(shell)
   }
 
@@ -295,6 +357,7 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', tint = [0.78, 0.82,
     actions[clip.name] = a
   }
   const has = (n) => !!actions[n]
+  const dur = (n) => actions[n].getClip().duration
   const ovr = {} // override clip name -> current weight (for cross-fades)
   let locoPhase = 0
   let idleTime = 0
@@ -303,26 +366,40 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', tint = [0.78, 0.82,
   let wasGrounded = true
   let airTime = 0
   let landing = 0
+  let lastJumps = 0
+  let sinceDouble = Infinity
+  let nearW = 0 // fight stance weight (eased)
+  let yawOverride = null
   let shown = null
 
-  function update(p, dt) {
+  // p = the fighter's state from the simulation, dt = seconds since last update,
+  // ctx.near = an opponent is close (switches to the fight stance).
+  function update(p, dt, ctx = {}) {
     if (dt <= 0) return
-    // Landing: a short knee bend after a real fall.
-    if (p.grounded && !wasGrounded && airTime > 0.25) landing = 0.22
+    if (p.grounded && !wasGrounded && airTime > 0.25) landing = 0.25
     airTime = p.grounded ? 0 : airTime + dt
     wasGrounded = p.grounded
     landing = Math.max(0, landing - dt)
+    if (p.jumps !== lastJumps) {
+      if (p.lastJump === 'double') sinceDouble = 0
+      lastJumps = p.jumps
+    }
+    sinceDouble += dt
+    if (p.grounded) sinceDouble = Infinity
 
     const frozen = p.hitstop > 0
     const step = frozen ? 0 : dt
     const speed = Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z)
 
-    // Override (attack, block, hit, dash, air...) fades in over ~0.06 s.
-    const o = overrideClip(p, landing)
+    // Rolling: the body turns to roll the way the dash goes (render only).
+    yawOverride = p.combat === 'dash' && speed > 0.5 ? Math.atan2(p.vel.x, p.vel.z) : null
+
+    // Override (attack, block, hit, dash, air...) fades in quickly.
+    const o = overrideClip(p, { landing, sinceDouble, near: ctx.near })
     const target = o && has(o[0]) ? o[0] : null
     if (target !== lastOverride) loopTime = 0
     lastOverride = target
-    const fade = Math.min(1, dt / 0.06)
+    const fade = Math.min(1, dt / 0.07)
     for (const n of new Set([...Object.keys(ovr), ...(target ? [target] : [])])) {
       ovr[n] = (ovr[n] ?? 0) + ((n === target ? 1 : 0) - (ovr[n] ?? 0)) * fade
       if (ovr[n] < 0.001 && n !== target) delete ovr[n]
@@ -331,34 +408,48 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', tint = [0.78, 0.82,
     for (const n in ovr) ovrSum += ovr[n]
     ovrSum = Math.min(1, ovrSum)
 
-    // Locomotion, phase-synced so the feet of the walk, run and sprint line up.
+    // Locomotion: walk and run phase-synced, played at the speed that matches
+    // the ground, so the feet don't slide.
     const w = locoWeights(speed)
-    const rates = { walk: Math.max(0.5, speed / 1.6), run: speed / 5, sprint: speed / 7.5 }
     let phaseRate = 0
-    for (const k of ['walk', 'run', 'sprint']) {
-      if (has(LOCO[k])) phaseRate += (w[k] * rates[k]) / actions[LOCO[k]].getClip().duration
-    }
+    if (has(CLIPS.walk)) phaseRate += (w.walk * (speed / STRIDE.walk)) / dur(CLIPS.walk)
+    if (has(CLIPS.run)) phaseRate += (w.run * (speed / STRIDE.run)) / dur(CLIPS.run)
+    if (w.walk + w.run > 0) phaseRate /= w.walk + w.run
     locoPhase = (locoPhase + phaseRate * step) % 1
     idleTime += step
     loopTime += step
+    nearW += ((ctx.near ? 1 : 0) - nearW) * Math.min(1, dt * 4)
 
     for (const n in actions) actions[n].setEffectiveWeight(0)
-    for (const k in LOCO) {
-      const a = actions[LOCO[k]]
-      if (!a) continue
-      const d = a.getClip().duration
-      a.time = k === 'idle' ? idleTime % d : locoPhase * d
-      a.setEffectiveWeight(w[k] * (1 - ovrSum))
+    const rest = 1 - ovrSum
+    const set = (name, weight, time) => {
+      const a = actions[name]
+      if (!a || weight <= 0) return
+      a.time = time % dur(name)
+      a.setEffectiveWeight(a.getEffectiveWeight() + weight)
     }
+    set(CLIPS.idle, w.idle * (1 - nearW) * rest, idleTime)
+    set(CLIPS.fightIdle, w.idle * nearW * rest, idleTime)
+    set(CLIPS.walk, w.walk * rest, locoPhase * (has(CLIPS.walk) ? dur(CLIPS.walk) : 1))
+    set(CLIPS.run, w.run * rest, locoPhase * (has(CLIPS.run) ? dur(CLIPS.run) : 1))
     for (const n in ovr) {
       const a = actions[n]
-      const d = a.getClip().duration
+      const d = dur(n)
       if (n === target && o[1] !== 'loop') a.time = Math.min(o[1] * d, d - 1e-3)
       else if (n === target) a.time = loopTime % d
-      a.setEffectiveWeight(ovr[n])
+      a.setEffectiveWeight(a.getEffectiveWeight() + ovr[n])
     }
     mixer.update(0) // apply the times and weights we just set
-    shown = target && ovrSum > 0.5 ? target : maxKey(w, LOCO)
+    shown =
+      target && ovrSum > 0.5
+        ? target
+        : w.idle >= w.walk && w.idle >= w.run
+          ? nearW > 0.5
+            ? CLIPS.fightIdle
+            : CLIPS.idle
+          : w.run > w.walk
+            ? CLIPS.run
+            : CLIPS.walk
   }
 
   return {
@@ -369,23 +460,17 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', tint = [0.78, 0.82,
     place(pos, yaw) {
       // pos is the body's centre; the model's origin is at its feet.
       root.position.set(pos.x, pos.y - FOOT_OFFSET, pos.z)
-      body.rotation.y = yaw
+      body.rotation.y = yawOverride ?? yaw
       shadow.place(pos.y - FOOT_OFFSET, pos.y - FOOT_OFFSET, groundUnder(pos))
     },
     update,
     dispose() {
       mixer.stopAllAction()
       mixer.uncacheRoot(model)
-      outline.dispose()
       ramp.dispose()
+      for (const m of made) m.dispose()
     },
   }
-}
-
-function maxKey(w, names) {
-  let best = 'idle'
-  for (const k in w) if (w[k] > w[best]) best = k
-  return names[best]
 }
 
 // The floor height under a point. The shadow should sit on a ledge when you

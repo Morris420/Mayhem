@@ -7,6 +7,7 @@ import { useGameStore } from '@/stores/game'
 import { useGymStore } from '@/stores/gym'
 import { useNutritionStore } from '@/stores/nutrition'
 import { useCoachStore } from '@/stores/coach'
+import { useArenaStore } from '@/stores/arena'
 
 // The frame around every logged-in page: top navigation + logout.
 const auth = useAuthStore()
@@ -30,6 +31,7 @@ async function logout() {
   useGymStore().reset()
   useNutritionStore().reset()
   useCoachStore().reset()
+  useArenaStore().reset()
   router.push({ name: 'login' })
 }
 </script>

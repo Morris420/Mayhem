@@ -67,12 +67,17 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
   - Controls: mouse look (click the arena to capture the mouse, Esc releases, wheel zooms), left click light, right click heavy, F (or L) guard, C dash; the stick follows the camera.
   - Guard meter: blocking costs guard (per move), holding drains it slowly, it refills after a pause; at zero the guard breaks (stunned and open). A see-through shield sphere shows while guarding and shrinks with the meter; guard bars in the HUD.
   - Tests: 75 unit, 19 browser.
+- **A - the real hunter + a real arena, and C (server part) - stats from your skills: DONE (25 Nov).** Screenshots: docs/screenshots/arena-a-*.png.
+  - Hunter: Morrison's VRoid + Mixamo character, 16 clips (idle / fight idle / walk-run blend / jumps / fall-land / roll dash / two hit reactions / a jab-straight-uppercut combo cut from one flurry / emote on T). Dummy uses the same model in crimson. No textures yet (colours by part). docs/arena-assets.md.
+  - Arena: "Dungeon Gate", built from KayKit Dungeon Remastered (CC0): stone floor, two-storey walls, pillars, torches (warm lights), banners, rubble, a ledge staircase. Collisions still come from the room file.
+  - Stats: `GET /api/arena/loadout` (ArenaRules + Loadout) turns your skills into HP (+20% max), damage (+15% max) and guard (+20% max) plus ability unlocks; the arena fetches it (falls back to base stats) and shows it under your health bar.
+  - Tests: 81 unit, 19 browser, 121 backend.
 - **Next: the whole remaining plan is `docs/arena-build-guide.md`** (milestones A-G and the production checklist). Start a new chat with `docs/next-session-prompt.md`; work on the `arena` branch.
 
 ## Arena: decisions waiting for you
 - Nav change (FYI, touches the System): labels show from 1280 px up, icons below. Alternative: drop the username from the header instead.
 - Mouse: right click = heavy and F = guard were my picks (you asked for left click = attack); easy to swap in `input.js`.
-- The hunter is a placeholder (KayKit, chibi). Your VRoid + Mixamo hunter replaces it.
+- The hunter needs its textures back: send the `.vrm` (or the texture PNGs) and a few more clips (see docs/arena-assets.md).
 
 ## Later: arena combat game (original sketch, superseded by arena-design.md)
 - Combat stats computed server-side from skills (Strength attack, Stamina HP, Discipline defense, Intellect ability power, Faith healing/resist, Affection support, Fortune crit/loot, Craft gear).

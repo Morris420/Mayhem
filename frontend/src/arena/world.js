@@ -4,6 +4,7 @@
 // exactly what you collide with.
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { roomBoxes } from './physics.js'
 
 export { roomBoxes }
@@ -29,13 +30,13 @@ function trimGeometries(room) {
   const out = []
   const ys = [BAND / 2 + 0.02, h - BAND / 2 - 0.2]
 
-  for (const y of ys) {
+  for (const y of room.wallTrim === false ? [] : ys) {
     out.push(boxGeometry([0, y, -hd + LIP / 2], [hw, BAND / 2, LIP / 2]))
     out.push(boxGeometry([0, y, hd - LIP / 2], [hw, BAND / 2, LIP / 2]))
     out.push(boxGeometry([-hw + LIP / 2, y, 0], [LIP / 2, BAND / 2, hd]))
     out.push(boxGeometry([hw - LIP / 2, y, 0], [LIP / 2, BAND / 2, hd]))
   }
-  for (const p of room.pillars ?? []) {
+  for (const p of room.wallTrim === false ? [] : (room.pillars ?? [])) {
     const s = p.size / 2 + LIP
     for (const y of ys) out.push(boxGeometry([p.x, y, p.z], [s, BAND / 2, s]))
   }
@@ -135,19 +136,20 @@ export function buildRoomScene(room) {
       boxes.filter((b) => kinds.includes(b.kind)).map((b) => boxGeometry(b.center, b.half)),
     )
 
+  const kitted = room.drawWalls === false // a kit draws the floor, walls and pillars
   const floor = new THREE.Mesh(
     pick(['floor']),
     new THREE.MeshStandardMaterial({ color: c.floor, roughness: 0.9, metalness: 0.05 }),
   )
   floor.name = 'floor'
-  group.add(floor)
+  if (!kitted) group.add(floor)
 
   const walls = new THREE.Mesh(
     pick(['wall', 'pillar']),
     new THREE.MeshStandardMaterial({ color: c.wall, roughness: 0.75, metalness: 0.15 }),
   )
   walls.name = 'walls'
-  group.add(walls)
+  if (!kitted) group.add(walls)
 
   if (room.blocks?.length) {
     const blocks = new THREE.Mesh(
@@ -161,12 +163,15 @@ export function buildRoomScene(room) {
   // The trim is an unlit colour, dimmed by trimIntensity; bloom picks up only
   // the brightest of it.
   const trimColor = new THREE.Color(c.trim).multiplyScalar(room.trimIntensity ?? 1)
-  const trim = new THREE.Mesh(
-    mergeGeometries(trimGeometries(room)),
-    new THREE.MeshBasicMaterial({ color: trimColor }),
-  )
-  trim.name = 'trim'
-  group.add(trim)
+  const trimParts = trimGeometries(room)
+  if (trimParts.length) {
+    const trim = new THREE.Mesh(
+      mergeGeometries(trimParts),
+      new THREE.MeshBasicMaterial({ color: trimColor }),
+    )
+    trim.name = 'trim'
+    group.add(trim)
+  }
 
   const grid = new THREE.Mesh(
     new THREE.PlaneGeometry(room.width, room.depth),
@@ -182,7 +187,7 @@ export function buildRoomScene(room) {
   grid.rotation.x = -Math.PI / 2
   grid.position.y = 0.005
   grid.name = 'grid'
-  group.add(grid)
+  if (room.drawGrid !== false) group.add(grid)
 
   // A dim ring in the centre: where the opponent will stand once there is a fight.
   const ring = new THREE.Mesh(
@@ -203,11 +208,64 @@ export function buildRoomScene(room) {
   group.add(motes)
 
   // Light: dark and cold. A faint fill and one dim key light. No shadow maps.
-  group.add(new THREE.HemisphereLight('#4a62b8', '#010104', 0.55))
-  const key = new THREE.DirectionalLight('#a9d8ff', 0.6)
+  const L = room.light ?? {}
+  group.add(
+    new THREE.HemisphereLight(L.sky ?? '#4a62b8', L.ground ?? '#010104', L.skyIntensity ?? 0.55),
+  )
+  const key = new THREE.DirectionalLight(L.moon ?? '#a9d8ff', L.moonIntensity ?? 0.6)
   key.position.set(5, 12, 7)
   group.add(key)
 
   group.userData.update = (t) => motes.userData.update(t)
+  return group
+}
+
+// The room's dressing: every piece from its kit file, placed as listed in the
+// room file. Pieces that repeat (floor tiles, wall segments) become one
+// instanced mesh each, so a whole dungeon is a handful of draw calls. Torches get
+// a warm light on every third one (lights are expensive per pixel).
+export async function loadRoomDressing(room) {
+  const group = new THREE.Group()
+  group.name = 'dressing'
+  if (!room.kit || !room.dressing?.length) return group
+  const gltf = await new GLTFLoader().loadAsync(room.kit)
+  const byPiece = {}
+  for (const d of room.dressing) (byPiece[d.piece] ??= []).push(d)
+
+  const m = new THREE.Matrix4()
+  const q = new THREE.Quaternion()
+  const up = new THREE.Vector3(0, 1, 0)
+  for (const [piece, list] of Object.entries(byPiece)) {
+    const src = gltf.scene.getObjectByName(piece)
+    if (!src) continue
+    src.updateMatrixWorld(true)
+    const rootInv = new THREE.Matrix4().copy(src.matrixWorld).invert()
+    src.traverse((o) => {
+      if (!o.isMesh) return
+      // The mesh's own placement inside the piece.
+      const local = new THREE.Matrix4().multiplyMatrices(rootInv, o.matrixWorld)
+      const inst = new THREE.InstancedMesh(o.geometry, o.material, list.length)
+      list.forEach((d, i) => {
+        q.setFromAxisAngle(up, d.rot ?? 0)
+        const sc = d.scale ?? [1, 1, 1]
+        m.compose(new THREE.Vector3(d.x, d.y ?? 0, d.z), q, new THREE.Vector3(...sc))
+        inst.setMatrixAt(i, m.multiply(local))
+      })
+      inst.name = `kit:${piece}`
+      group.add(inst)
+    })
+  }
+
+  const T = room.torchLight
+  if (T) {
+    room.dressing
+      .filter((d) => d.light)
+      .forEach((d, i) => {
+        if (i % 3) return
+        const light = new THREE.PointLight(T.color, T.intensity, T.distance, 2)
+        light.position.set(d.x, (d.y ?? 0) + 0.4, d.z)
+        group.add(light)
+      })
+  }
   return group
 }

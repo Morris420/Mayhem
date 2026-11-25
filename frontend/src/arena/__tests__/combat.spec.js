@@ -347,6 +347,63 @@ describe('air and bodies', () => {
   })
 })
 
+describe('stats from the loadout', () => {
+  const loadout = { maxHp: 112, maxGuard: 109, stats: { hp: 1.12, damage: 1.5, guard: 1.09 } }
+
+  it('max health and guard come from the loadout', () => {
+    const sim = createSimulation(room, { dummy: 'idle', loadout })
+    expect(sim.state().player.hp).toBe(112)
+    expect(sim.state().player.guardMax).toBe(109)
+    expect(sim.state().dummy.hp).toBe(COMBAT.maxHp) // the dummy keeps base stats
+  })
+
+  it('the damage multiplier scales every hit (rounded to whole points)', () => {
+    const sim = createSimulation(room, { dummy: 'idle', loadout })
+    sim.teleport({ x: D.x, y: STAND, z: D.z + 1 })
+    for (let i = 0; i < 20; i++) sim.step()
+    sim.press('light')
+    const ev = run(sim, 500)
+    expect(ev[0].damage).toBe(Math.round(MOVES.L1.damage * 1.5))
+    expect(sim.state().dummy.hp).toBe(COMBAT.maxHp - Math.round(MOVES.L1.damage * 1.5))
+  })
+
+  it('base stats without a loadout', () => {
+    const sim = createSimulation(room, { dummy: 'idle' })
+    expect(sim.state().player.hp).toBe(COMBAT.maxHp)
+  })
+})
+
+describe('emote', () => {
+  it('T starts the emote when standing still; moving ends it', () => {
+    const sim = face(4)
+    sim.press('emote')
+    run(sim, 300)
+    expect(sim.state().player.combat).toBe('emote')
+    sim.setInput({ y: 1 })
+    sim.step()
+    expect(sim.state().player.combat).toBe('free')
+  })
+
+  it('an attack ends the emote and comes out straight away', () => {
+    const sim = face(1)
+    sim.press('emote')
+    run(sim, 300)
+    sim.press('light')
+    sim.step()
+    sim.step()
+    expect(sim.state().player.combat).toBe('attack')
+  })
+
+  it('no emote while moving', () => {
+    const sim = face(6)
+    sim.setInput({ x: 1 })
+    run(sim, 300)
+    sim.press('emote')
+    run(sim, 100)
+    expect(sim.state().player.combat).toBe('free')
+  })
+})
+
 describe('KO', () => {
   it('at zero health: KO, then back on its feet with full health', () => {
     const sim = face(1)
