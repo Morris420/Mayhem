@@ -18,24 +18,24 @@ export const SIZE = 1.25
 export const MOVE = {
   radius: 0.4 * SIZE, // body radius, metres
   halfHeight: 0.5 * SIZE, // total height = 2 * (halfHeight + radius) = 1.8 m * SIZE
-  walkSpeed: 5.5, // m/s at full stick (a bigger hunter covers more ground)
-  sprintSpeed: 9.5, // m/s with sprint held
+  walkSpeed: 4.6, // m/s at full stick
+  sprintSpeed: 8, // m/s with sprint held
   crouchSpeed: 2.4, // m/s crouch-walking (no sprint while crouched)
   hardLanding: 13, // m/s falling speed from which a landing is heavy...
   landLag: 0.2, // ...and slows you for this long (s)...
   landLagSpeed: 0.35, // ...to this share of your speed
-  accel: 40, // m/s² on the ground; high = snappy, low = icy
+  accel: 30, // m/s² on the ground; high = snappy, low = icy (30: some weight)
   airAccel: 14, // m/s² in the air: you can steer a jump, but not turn on a dime
-  gravity: 24, // m/s², heavier than real (9.8): games feel floaty otherwise
+  gravity: 31, // m/s², heavier than real (9.8): a jump that drops, not floats
   maxFall: 30, // terminal velocity, m/s
-  jumpSpeed: 9, // m/s upwards; full jump height = jumpSpeed² / (2 * gravity) ≈ 1.69 m
+  jumpSpeed: 10.2, // m/s upwards; full jump height = jumpSpeed² / (2 * gravity) ≈ 1.68 m
   jumpCutSpeed: 4, // let go of jump while rising and upward speed drops to this: a short hop
   coyoteTime: 0.1, // s after walking off a ledge during which you can still jump
   jumpBuffer: 0.12, // s a jump press is remembered before landing
   wallSlideSpeed: 2.2, // m/s max fall while hugging a wall
-  doubleJumpSpeed: 9.8, // m/s upwards for the second jump: a little higher than the first
+  doubleJumpSpeed: 10.8, // m/s upwards for the second jump: a little higher than the first
   doubleJumpPush: 6, // m/s at least, in the direction you steer (or were moving)
-  wallJumpUp: 10.5, // m/s upwards when kicking off a wall: higher than a normal jump
+  wallJumpUp: 11.6, // m/s upwards when kicking off a wall: higher than a normal jump
   wallJumpPush: 7.5, // m/s away from the wall
   wallGrace: 0.12, // s after leaving a wall during which a wall jump still works
   wallJumpLock: 0.2, // s after a wall jump during which the stick can't steer you back

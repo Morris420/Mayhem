@@ -5,6 +5,7 @@
 // Everything is driven through window.__arena (?test=1), which only advances the
 // game when told to, so none of these assertions depend on timing.
 import { mkdirSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 import { expect, test } from '@playwright/test'
 
 const SHOTS = new URL('./screenshots/', import.meta.url).pathname
@@ -28,8 +29,9 @@ test.afterEach(async ({ page }, info) => {
 
 // Most tests run in the Dungeon Gate: they need its staircase and walls. The
 // Training Room (the default) and the Ruined Church have their own tests.
+// boss=0: no boss, whatever the user has earned (one test grants the marathon).
 async function openArena(page, room = 'training-hall') {
-  await page.goto(`/arena?test=1&room=${room}`)
+  await page.goto(`/arena?test=1&room=${room}&boss=0`)
   await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 60_000 })
   // The dummy wanders by default; most tests want it standing still.
   await page.evaluate(() => window.__arena.dummy('idle'))
@@ -58,7 +60,7 @@ test('the arena loads and actually draws the lit dungeon', async ({ page }) => {
 })
 
 test('the Training Room: the default arena, lit, with shadows and props', async ({ page }) => {
-  await page.goto('/arena?test=1')
+  await page.goto('/arena?test=1&boss=0')
   await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 90_000 })
   await page.evaluate(() => window.__arena.dummy('idle'))
   const dbg = await page.evaluate(() => window.__arena.debug())
@@ -77,8 +79,58 @@ test('the Training Room: the default arena, lit, with shadows and props', async 
   expect(s.player.pos.y).toBeGreaterThan(1.9) // standing on the 1 m ledge
 })
 
+// The Shadow Knight: only for hunters with the marathon medal. The test grants it
+// with the same artisan command Morrison uses for JohnDoe, against the e2e database.
+test('the Shadow Knight: needs the marathon, fights, falls, unlocks Shadow slash', async ({
+  page,
+}) => {
+  const backend = new URL('../../backend/', import.meta.url).pathname
+  execSync('php artisan mayhem:grant-achievement e2e_hunter golden-medal', {
+    cwd: backend,
+    env: {
+      ...process.env,
+      DB_CONNECTION: 'sqlite',
+      DB_DATABASE: `${backend}database/e2e.sqlite`,
+    },
+  })
+  await page.goto('/arena?test=1')
+  await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 90_000 })
+  await page.evaluate(() => window.__arena.dummy('idle'))
+  // He waits at the far end until you come close.
+  let s = await step(page, 200)
+  expect(s.boss.awake).toBe(false)
+  await page.evaluate(() => window.__arena.teleport({ x: 0, y: 1.2, z: -5 }))
+  s = await step(page, 300)
+  expect(s.boss.awake).toBe(true)
+  await expect(page.getByTestId('boss-bar')).toBeVisible()
+  await expect(page.getByTestId('ability-shadow_slash')).toHaveAttribute('data-ready', 'no')
+  await page.evaluate(() => window.__arena.camera({ yaw: 0, pitch: 25, distance: 9 }))
+  await step(page, 50)
+  await page.screenshot({ path: `${SHOTS}arena-boss.png` })
+
+  // A real fight lasts a while (the server refuses a win under 15 s): let 16 s
+  // pass with the player untouchable, then finish him from 1 health.
+  await page.evaluate(() => window.__arena.invuln(60 * 30))
+  await step(page, 16000)
+  await page.evaluate(() => window.__arena.bossHp(1))
+  for (let i = 0; i < 30; i++) {
+    const st = await page.evaluate(() => window.__arena.state())
+    if (st.boss.combat === 'ko') break
+    const b = st.boss.pos
+    await page.evaluate((b) => window.__arena.teleport({ x: b.x, y: 1.16, z: b.z + 1.5 }), b)
+    await step(page, 50) // feet on the floor first (a jab in the air ends on landing)
+    await input(page, 'light')
+    await step(page, 400)
+  }
+  await expect(page.getByTestId('victory')).toContainText('SHADOW KNIGHT DEFEATED')
+  await expect(page.getByTestId('victory')).toContainText('Shadow slash')
+  await page.getByTestId('victory-continue').click()
+  await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 90_000 })
+  await expect(page.getByTestId('ability-shadow_slash')).toHaveAttribute('data-ready', 'yes')
+})
+
 test('the Ruined Church (the boss room): loads, and its walls hold', async ({ page }) => {
-  await page.goto('/arena?test=1&room=ruined-church')
+  await page.goto('/arena?test=1&room=ruined-church&boss=0')
   await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 90_000 })
   await page.evaluate(() => window.__arena.dummy('idle'))
   const dbg = await page.evaluate(() => window.__arena.debug())
@@ -110,12 +162,12 @@ test('the capsule falls, walks and collides — through the test hook', async ({
   expect(s.player.pos.y).toBeLessThan(spawnY - 1)
   expect(s.player.pos.y).toBeGreaterThan(0.85) // capsule centre, feet on the floor
 
-  // Walks forward (-z) about 5.2 m in a second (5.5 m/s after speeding up).
+  // Walks forward (-z) about 4.3 m in a second (4.6 m/s after speeding up).
   const z0 = s.player.pos.z
   await input(page, { x: 0, y: 1 })
   s = await step(page, 1000)
-  expect(z0 - s.player.pos.z).toBeGreaterThan(4.9)
-  expect(z0 - s.player.pos.z).toBeLessThan(5.51)
+  expect(z0 - s.player.pos.z).toBeGreaterThan(4)
+  expect(z0 - s.player.pos.z).toBeLessThan(4.61)
 
   // Holds left for six seconds: stops at the wall (inner face x = -22, radius 0.5).
   await input(page, { x: -1, y: 0 })
@@ -151,7 +203,7 @@ test('sprint, jump and wall hug — and the hunter animates to match', async ({ 
   const z0 = s.player.pos.z
   await input(page, { y: 1, sprint: true })
   s = await step(page, 1000)
-  expect(z0 - s.player.pos.z).toBeGreaterThan(7)
+  expect(z0 - s.player.pos.z).toBeGreaterThan(6.4) // 8 m/s, with a heavier start
   expect(s.player.sprinting).toBe(true)
   expect(await clip()).toBe('Run')
 
@@ -259,7 +311,7 @@ test('leaving the page frees the WebGL context, every visit', async ({ page }) =
 })
 
 test('real-time mode: no test hook, the clock runs, and the keyboard walks', async ({ page }) => {
-  await page.goto('/arena')
+  await page.goto('/arena?boss=0')
   await expect(page.locator('canvas[data-arena="canvas"]')).toBeVisible()
   expect(await page.evaluate(() => window.__arena)).toBeUndefined()
 
@@ -367,14 +419,19 @@ test('stats from your skills: the server loadout reaches the fighter and the HUD
   expect(s.player.guardMax).toBe(lo.stats.guard)
   expect(s.player.damage).toBe(lo.stats.damage)
   expect(s.player.power).toBe(lo.stats.ability_power)
-  expect(s.player.slots).toEqual(['fire_bolt', null, null])
+  // Shadow slash is slotted only once the Shadow Knight is beaten (the boss test
+  // may have run first in this suite).
+  const slash = lo.abilities.find((x) => x.slug === 'shadow_slash')
+  expect(s.player.slots).toEqual(['fire_bolt', slash.unlocked ? 'shadow_slash' : null, null])
   // A fresh hunter: the bottom of the ±20% / ±15% band.
   expect(lo.stats).toMatchObject({ health: 80, guard: 80, damage: 85, ability_power: 85 })
 
   await expect(page.getByTestId('stat-health')).toHaveText('80')
   await expect(page.getByTestId('stat-damage')).toHaveText('85%')
   await expect(page.getByTestId('ability-fire_bolt')).toHaveAttribute('data-ready', 'yes')
-  await expect(page.getByTestId('ability-second_wind')).toContainText('soon')
+  if (!slash.unlocked)
+    await expect(page.getByTestId('ability-shadow_slash')).toContainText('beat the boss')
+  await expect(page.getByTestId('ability-iron_skin')).toContainText('soon')
 })
 
 test('fire bolt: Q casts, the orb flies, it lands, the HUD shows the cooldown', async ({
@@ -404,7 +461,7 @@ test('fire bolt: Q casts, the orb flies, it lands, the HUD shows the cooldown', 
   expect((await page.evaluate(() => window.__arena.debug())).bolts).toBe(0)
   // The cooldown counts down on the slot.
   await expect(page.getByTestId('ability-fire_bolt')).toContainText(/\ds/)
-  await step(page, 1500)
+  await step(page, 2500) // 2.5 s cooldown
   await expect(page.getByTestId('ability-fire_bolt')).toHaveAttribute('data-ready', 'yes')
 })
 

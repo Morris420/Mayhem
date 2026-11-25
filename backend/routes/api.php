@@ -31,6 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'show']);
     Route::get('/skills', [DashboardController::class, 'skills']);
     Route::get('/arena/loadout', [ArenaController::class, 'loadout']);
+    Route::post('/arena/bosses/{boss}/defeat', [ArenaController::class, 'defeatBoss']);
     Route::get('/calendar', [CalendarController::class, 'show']);
 
     Route::get('/tasks', [TaskController::class, 'index']);

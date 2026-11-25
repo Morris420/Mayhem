@@ -16,15 +16,15 @@ class ArenaRulesTest extends TestCase
     {
         // A fresh hunter (every skill 1): 80 health, 85% damage.
         $fresh = Loadout::fromLevels([])['stats'];
-        $this->assertSame(['health' => 80, 'guard' => 80, 'damage' => 85, 'ability_power' => 85, 'mana' => 100], $fresh);
+        $this->assertSame(['health' => 80, 'guard' => 80, 'damage' => 85, 'ability_power' => 85], $fresh);
 
         // Level 50 everywhere fights exactly like the frame data was tuned.
         $mid = Loadout::fromLevels(array_fill_keys(['strength', 'stamina', 'discipline', 'intellect'], 50))['stats'];
-        $this->assertSame(['health' => 100, 'guard' => 100, 'damage' => 100, 'ability_power' => 100, 'mana' => 100], $mid);
+        $this->assertSame(['health' => 100, 'guard' => 100, 'damage' => 100, 'ability_power' => 100], $mid);
 
         // Maxed: 120 health, 115% damage.
         $max = Loadout::fromLevels(array_fill_keys(['strength', 'stamina', 'discipline', 'intellect'], 99))['stats'];
-        $this->assertSame(['health' => 120, 'guard' => 120, 'damage' => 115, 'ability_power' => 115, 'mana' => 100], $max);
+        $this->assertSame(['health' => 120, 'guard' => 120, 'damage' => 115, 'ability_power' => 115], $max);
     }
 
     public function test_the_gap_stays_small(): void
@@ -50,11 +50,26 @@ class ArenaRulesTest extends TestCase
         $abilities = collect(Loadout::fromLevels([])['abilities'])->keyBy('slug');
         $this->assertTrue($abilities['fire_bolt']['unlocked']); // every hunter's first spell
         $this->assertSame('Q', $abilities['fire_bolt']['key']);
-        $this->assertFalse($abilities['second_wind']['unlocked']);
+        $this->assertFalse($abilities['shadow_slash']['unlocked']); // needs the Shadow Knight
 
         // Not built yet: shown, never unlocked, whatever the level.
         $high = collect(Loadout::fromLevels(['faith' => 99, 'discipline' => 99])['abilities'])->keyBy('slug');
-        $this->assertFalse($high['second_wind']['unlocked']);
+        $this->assertFalse($high['iron_skin']['unlocked']);
         $this->assertFalse($high['iron_skin']['built']);
+    }
+
+    public function test_bosses_need_their_achievement_and_unlock_their_ability(): void
+    {
+        $none = Loadout::fromLevels([]);
+        $this->assertSame('shadow_knight', $none['bosses'][0]['slug']);
+        $this->assertFalse($none['bosses'][0]['available']);
+
+        $runner = Loadout::fromLevels([], ['golden-medal']);
+        $this->assertTrue($runner['bosses'][0]['available']);
+        $this->assertFalse($runner['bosses'][0]['defeated']);
+
+        $won = Loadout::fromLevels([], ['golden-medal'], ['shadow_knight']);
+        $this->assertTrue($won['bosses'][0]['defeated']);
+        $this->assertTrue(collect($won['abilities'])->firstWhere('slug', 'shadow_slash')['unlocked']);
     }
 }

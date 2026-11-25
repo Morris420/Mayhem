@@ -1,4 +1,4 @@
-// Abilities: casting, mana, cooldowns and projectiles. Part of the deterministic
+// Abilities: casting, cooldowns and projectiles (no mana: Morrison, 25 Nov). Part of the deterministic
 // simulation (same rules as combat.js: only + - * /, sqrt, floor/ceil/min/max/abs,
 // everything processed in array order), so a fire bolt rewinds and replays like
 // a punch does.
@@ -9,18 +9,21 @@
 // speeds, sizes), like moves.js does for attacks.
 //
 // A cast: press the ability's key (Q / E / R = slots 1-3) while free or guarding,
-// on the ground, with the mana and no cooldown. You stand and wind up (`startup`
-// frames, interruptible: get hit and the mana is gone), the spell leaves your hand,
-// then `recovery` frames before you can act.
+// on the ground, off cooldown. You stand and wind up (`startup` frames,
+// interruptible: get hit and the cooldown is spent anyway), the spell leaves your
+// hand, then `recovery` frames before you can act. An ability with `move` is a
+// technique instead of a spell: it starts that move from moves.js.
 import { MOVE } from './player.js'
 import { COMBAT } from './moves.js'
 
-//   cost       mana spent when the cast starts
 //   cooldown   frames before the slot can be used again (counted from the cast)
 //   startup    wind-up frames before the bolt leaves your hand
 //   recovery   frames after it leaves, before you can act again
 //   aimRange   the cast turns you towards an opponent this close (metres)
-//   speed      m/s the bolt flies (flat, straight ahead)
+//   speed      m/s the bolt flies (flat)
+//   homing     how hard it bends towards the nearest enemy each step (0 = straight).
+//              Gentle on purpose: a bolt aimed well flies straight; one that goes
+//              wide curves back in, but a dash or a sidestep still beats it.
 //   life       frames before it fizzles: speed x life / 60 = range in metres
 //   radius     size of the bolt's hit sphere, metres
 //   height     metres above the caster's body centre it flies at
@@ -30,13 +33,14 @@ import { COMBAT } from './moves.js'
 export const ABILITIES = {
   fire_bolt: {
     name: 'Fire bolt',
-    cost: 30,
-    cooldown: 90,
+    cooldown: 150, // 2.5 s
     startup: 14,
     recovery: 16,
     aimRange: 14,
     speed: 16,
-    life: 54, // ~14 m
+    homing: 0.07,
+    homingDelay: 6, // frames of straight flight before it starts to curve
+    life: 66, // ~17 m of flight
     radius: 0.35,
     height: 0.35,
     damage: 10,
@@ -46,16 +50,18 @@ export const ABILITIES = {
     push: 3,
     hitstop: 6,
   },
-}
-
-export const MANA = {
-  regen: 8, // per second, always
+  // Unlocked by beating the Shadow Knight: his charge-and-dash slash, yours now.
+  shadow_slash: {
+    name: 'Shadow slash',
+    cooldown: 360, // 6 s
+    move: 'SHADOW_SLASH',
+  },
 }
 
 // What every fighter gets when no loadout is given (unit tests, the dummy, the
 // server unreachable): the tuned numbers, no abilities.
 export const BASE_LOADOUT = {
-  stats: { health: 100, guard: 100, damage: 100, ability_power: 100, mana: 100 },
+  stats: { health: 100, guard: 100, damage: 100, ability_power: 100 },
   abilities: [],
 }
 
@@ -79,7 +85,6 @@ export function fighterLoadout(loadout = BASE_LOADOUT) {
     guard: int(s.guard, 1, 999, b.guard),
     damage: int(s.damage, 1, 500, b.damage), // % of the frame data's damage
     power: int(s.ability_power, 1, 500, b.ability_power), // % of an ability's damage
-    mana: int(s.mana, 0, 999, b.mana),
     slots,
   }
 }
@@ -95,10 +100,7 @@ export function canCast(f, slot) {
   const id = c.slots[slot]
   if (!id) return false
   return (
-    (c.state === 'free' || c.state === 'block') &&
-    f.body.state.grounded &&
-    c.cooldowns[slot] === 0 &&
-    c.mana >= ABILITIES[id].cost
+    (c.state === 'free' || c.state === 'block') && f.body.state.grounded && c.cooldowns[slot] === 0
   )
 }
 
@@ -111,7 +113,6 @@ export function startCast(f, slot, opp) {
   c.castFrame = 0
   c.castCount++
   c.released = false
-  c.mana -= ab.cost
   c.cooldowns[slot] = ab.cooldown
   c.queued = null
   if (opp && opp.d < ab.aimRange && opp.d > 1e-6) {
@@ -120,9 +121,8 @@ export function startCast(f, slot, opp) {
   }
 }
 
-// Mana and cooldowns, once per (unfrozen) step.
+// Cooldowns, once per (unfrozen) step.
 export function tickAbilities(c) {
-  c.mana = Math.min(c.manaMax, c.mana + MANA.regen / 60)
   for (let i = 0; i < c.cooldowns.length; i++) if (c.cooldowns[i] > 0) c.cooldowns[i]--
 }
 
@@ -155,6 +155,8 @@ export function spawnProjectile(f, id) {
     id,
     kind,
     owner: f.id,
+    team: c.team,
+    age: 0,
     x: s.pos.x + s.facing.x * out,
     y: s.pos.y + ab.height,
     z: s.pos.z + s.facing.z * out,
@@ -163,6 +165,39 @@ export function spawnProjectile(f, id) {
     life: ab.life,
     power: c.power,
   }
+}
+
+// Bend a projectile's flight a little towards the nearest enemy in front of it.
+// Normalised blend of the current direction and the direction to the target, so
+// the speed never changes and the turn per step stays small.
+function steer(p, ab, fighters, canBeHit) {
+  p.age = (p.age ?? 0) + 1
+  if (p.age <= (ab.homingDelay ?? 0)) return
+  const sp = Math.sqrt(p.vx * p.vx + p.vz * p.vz)
+  if (sp < 1e-6) return
+  const ux = p.vx / sp
+  const uz = p.vz / sp
+  let best = null
+  let bestD2 = Infinity
+  for (const t of fighters) {
+    if (t.id === p.owner || t.c.team === p.team || !canBeHit(t)) continue
+    const dx = t.body.state.pos.x - p.x
+    const dz = t.body.state.pos.z - p.z
+    const d2 = dx * dx + dz * dz
+    if (d2 < 1e-6 || d2 >= bestD2) continue
+    if (dx * ux + dz * uz <= 0) continue // only what is still ahead of it
+    best = { dx, dz }
+    bestD2 = d2
+  }
+  if (!best) return
+  const d = Math.sqrt(bestD2)
+  let nx = ux + (best.dx / d) * ab.homing
+  let nz = uz + (best.dz / d) * ab.homing
+  const n = Math.sqrt(nx * nx + nz * nz)
+  nx /= n
+  nz /= n
+  p.vx = nx * sp
+  p.vz = nz * sp
 }
 
 const SUBSTEPS = 2 // 16 m/s = 0.27 m a step; halve it so nothing is skipped
@@ -193,6 +228,7 @@ export function stepProjectiles(projectiles, world, fighters, canBeHit, hit, dt)
   for (const p of projectiles) {
     const ab = ABILITIES[p.kind]
     let alive = true
+    if (ab.homing) steer(p, ab, fighters, canBeHit)
     for (let k = 0; k < SUBSTEPS && alive; k++) {
       p.x += (p.vx * dt) / SUBSTEPS
       p.z += (p.vz * dt) / SUBSTEPS
@@ -203,7 +239,7 @@ export function stepProjectiles(projectiles, world, fighters, canBeHit, hit, dt)
       }
       const reach = ab.radius + MOVE.radius
       for (const t of fighters) {
-        if (t.id === p.owner || !canBeHit(t)) continue
+        if (t.id === p.owner || t.c.team === p.team || !canBeHit(t)) continue
         const ts = t.body.state
         const dx = ts.pos.x - p.x
         const dz = ts.pos.z - p.z

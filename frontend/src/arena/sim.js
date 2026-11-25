@@ -18,6 +18,7 @@ import {
 } from './combat.js'
 import { spawnProjectile, stepProjectiles } from './abilities.js'
 import { createBrain, think } from './ai.js'
+import { BOSSES, createBossBrain, thinkBoss } from './boss.js'
 import { STEP_S } from './loop.js'
 
 // Small seeded PRNG (mulberry32). Integer maths only, so identical everywhere.
@@ -66,7 +67,11 @@ const clone = (o) => JSON.parse(JSON.stringify(o))
 // options.loadout: the player's stat block from the server (GET /api/arena/loadout).
 //   An input to the simulation, like the controls: it is never computed here.
 // options.dummyLoadout: the same for the dummy (default: the base numbers).
-export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dummyLoadout } = {}) {
+// options.boss: a boss slug from boss.js to put in the room (at room.bossSpawn).
+export function createSimulation(
+  room,
+  { seed = 1, dummy = 'none', loadout, dummyLoadout, boss = null } = {},
+) {
   const world = createCollisionWorld(room)
   const fighters = [
     createFighter(world, { id: 'player', spawn: room.spawn, facing: { x: 0, z: -1 }, loadout }),
@@ -78,9 +83,25 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
         spawn: room.dummySpawn,
         facing: { x: 0, z: 1 },
         loadout: dummyLoadout,
+        team: 'enemy',
       }),
     )
   }
+  let bossFighter = null
+  if (boss && BOSSES[boss] && room.bossSpawn) {
+    bossFighter = createFighter(world, {
+      id: 'boss',
+      spawn: room.bossSpawn,
+      facing: { x: 0, z: 1 },
+      loadout: BOSSES[boss].loadout,
+      team: 'enemy',
+      respawns: false,
+    })
+    fighters.push(bossFighter)
+  }
+  const bossBrain = bossFighter ? createBossBrain(boss) : null
+  // The boss fight: when it started (first tick he was awake) and how it ended.
+  const fight = { started: -1, ended: -1, result: null }
   const [hero] = fighters
   const brain = createBrain(dummy === 'none' ? 'idle' : dummy)
 
@@ -140,7 +161,11 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
   function step() {
     // Everyone decides from the same moment, then everyone moves, then hits land.
     const controls = fighters.map((f) =>
-      f === hero ? heroControls() : think(brain, f, hero, random),
+      f === hero
+        ? heroControls()
+        : f === bossFighter
+          ? thinkBoss(bossBrain, f, hero, random)
+          : think(brain, f, hero, random),
     )
     fighters.forEach((f, i) => {
       // A spell leaving the hand this step becomes a projectile (flies from next step).
@@ -154,9 +179,34 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
     const flown = stepProjectiles(projectiles, world, fighters, canBeHit, projectileHit, STEP_S)
     projectiles = flown.projectiles
     events.push(...flown.events)
+    if (bossFighter) bossRules()
     for (const e of events) e.tick = tick
     tick++
   }
+
+  // The fight's bookkeeping: starts when he wakes; ends when he falls (won), or
+  // when you are KO'd (lost: he walks back, healed, and waits for a rematch).
+  function bossRules() {
+    if (fight.result) return
+    if (bossBrain.awake && fight.started < 0) fight.started = tick
+    if (bossFighter.c.state === 'ko') {
+      fight.result = 'won'
+      fight.ended = tick
+      events.push({ type: 'boss-defeated', boss: bossBrain.slug, ms: bossFightMs() })
+    } else if (hero.c.state === 'ko' && fight.started >= 0) {
+      const c = bossFighter.c
+      c.hp = c.maxHp
+      c.guard = c.guardMax
+      bossFighter.body.teleport(room.bossSpawn)
+      Object.assign(bossBrain, createBossBrain(bossBrain.slug))
+      fight.started = -1
+      events.push({ type: 'boss-reset', boss: bossBrain.slug })
+    }
+  }
+  const bossFightMs = () =>
+    fight.started < 0
+      ? 0
+      : Math.round((((fight.ended >= 0 ? fight.ended : tick) - fight.started) * 1000) / 60)
 
   const clampAxis = (v) => Math.max(-1, Math.min(1, Number(v) || 0))
 
@@ -217,8 +267,6 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
       guardMax: c.guardMax,
       invuln: c.invuln,
       juggle: c.juggle,
-      mana: c.mana,
-      manaMax: c.manaMax,
       damage: c.damage,
       power: c.power,
       slots: [...c.slots],
@@ -238,7 +286,20 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
       phase: 'training', // a real fight adds 'fight', 'won', 'lost'
       input: { ...input },
       player: fighterState(hero),
-      dummy: fighters[1] ? { ...fighterState(fighters[1]), mode: brain.mode } : null,
+      dummy:
+        fighters[1] && fighters[1] !== bossFighter
+          ? { ...fighterState(fighters[1]), mode: brain.mode }
+          : null,
+      boss: bossFighter
+        ? {
+            ...fighterState(bossFighter),
+            slug: bossBrain.slug,
+            name: BOSSES[bossBrain.slug].name,
+            awake: bossBrain.awake,
+            result: fight.result,
+            fightMs: bossFightMs(),
+          }
+        : null,
       projectiles: projectiles.map((p) => ({ ...p })),
       events: events.map((e) => ({ ...e })),
     }
@@ -255,6 +316,8 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
       queued,
       pressHolding,
       brain,
+      bossBrain,
+      fight,
       projectiles,
       nextProjectile,
       fighters: fighters.map((f) => ({ body: f.body.state, c: f.c })),
@@ -272,6 +335,8 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
     Object.assign(queued, s.queued)
     pressHolding = s.pressHolding
     Object.assign(brain, s.brain)
+    if (bossBrain) Object.assign(bossBrain, s.bossBrain)
+    Object.assign(fight, s.fight)
     projectiles = s.projectiles
     nextProjectile = s.nextProjectile
     s.fighters.forEach((saved, i) => {
@@ -291,6 +356,7 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
     restore,
     teleport: (pos) => hero.body.teleport(pos),
     teleportDummy: (pos) => fighters[1]?.body.teleport(pos),
+    teleportBoss: (pos) => bossFighter?.body.teleport(pos),
     setDummyMode(mode) {
       if (!['auto', 'idle', 'block', 'attack'].includes(mode))
         throw new Error(`Unknown mode: ${mode}`)

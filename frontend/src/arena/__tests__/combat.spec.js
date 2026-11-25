@@ -326,6 +326,7 @@ describe('dash', () => {
     sim.setInput({ x: 1 })
     sim.press('dash')
     sim.step()
+    sim.setInput({ x: 0 }) // let go: the roll plays out in full
     expect(sim.state().player.grounded).toBe(true) // the animation dives; the body stays down
     sim.press('light') // ignored mid-roll
     sim.press('jump')
@@ -336,6 +337,16 @@ describe('dash', () => {
     expect(sim.state().player.move).toBeFalsy()
     steps(sim, 12)
     expect(sim.state().player.combat).toBe('free')
+  })
+
+  it('holding a direction at the end runs you straight out of the roll', () => {
+    const sim = face(6)
+    sim.setInput({ x: 1 })
+    sim.press('dash')
+    steps(sim, COMBAT.dashFrames - COMBAT.dashExitEarly + 1)
+    expect(sim.state().player.combat).toBe('free')
+    steps(sim, 20)
+    expect(sim.state().player.vel.x).toBeGreaterThan(3) // running
   })
 
   it('has a cooldown', () => {

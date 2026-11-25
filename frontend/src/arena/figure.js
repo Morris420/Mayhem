@@ -122,6 +122,16 @@ export const PALETTES = {
     pants: '#232836',
     shoes: '#161820',
   },
+  shadow: {
+    hair: '#16121f',
+    skin: '#3a3350',
+    eye: '#9b6bff',
+    coat: '#15121d',
+    coat2: '#1d1828',
+    accent: '#6b4dff',
+    pants: '#120f18',
+    shoes: '#0c0a10',
+  },
   enemy: {
     hair: '#4a2026',
     skin: '#e2bba5',
@@ -172,6 +182,9 @@ export const CLIPS = {
   fallLand: 'FallLand',
   roll: 'Roll',
   jump2: 'Jump', // the double jump
+  fallIdle: 'FallIdle',
+  hardLanding: 'HardLanding',
+  runToStop: 'RunToStop',
   crouchIdle: 'CrouchIdle',
   crouchWalk: 'CrouchWalk', // Mixamo's crouch walk *back*, played backwards
   standUp: 'StandUp', // crouch -> stand; backwards = crouching down
@@ -188,6 +201,10 @@ export const MOVE_CLIPS = {
   H: 'Cross', // big right cross
   LH: 'BodyBlow', // right body shot
   AIR: 'Jab',
+  // Techniques and the Shadow Knight: the big swing (no sword clip yet).
+  SHADOW_SLASH: 'Cross',
+  KNIGHT_SLASH: 'Cross',
+  KNIGHT_RUSH: 'Cross',
 }
 // Where in each attack clip the fist is fully out (0..1), measured by tracking
 // the hands frame by frame during conversion.
@@ -228,6 +245,11 @@ const CAST_IMPACT = 0.39
 // The dash: Mixamo's Run To Rolling, from the dive to back on his feet (seconds
 // into the clip), stretched over the whole dash.
 export const ROLL = { from: 0.42, to: 1.85, duration: 2.43 }
+// Hard landing (fractions of the clip): impact and back up; played over ~0.6 s.
+const HARD_LANDING = { from: 0.1, to: 0.62, length: 0.6 }
+// Run to stop: its first 0.55 s (the braking steps; later it turns away).
+const RUN_STOP = { to: 0.55, duration: 0.9, length: 0.34 }
+
 // Crouch_To_Stand: seconds into the clip where he is fully down / fully up.
 export const CROUCH = { down: 0.7, up: 2.25, duration: 3.33, in: 0.22, out: 0.3, stride: 1.1 }
 const dashProgress = (p) => clamp01((COMBAT.dashFrames - p.timer) / COMBAT.dashFrames)
@@ -236,7 +258,10 @@ export function overrideClip(p, ctx = {}) {
   switch (p.combat) {
     case 'attack': {
       const name = MOVE_CLIPS[p.move]
-      return [name, attackProgress(MOVES[p.move], p.moveFrame, IMPACT[name] ?? 0.4)]
+      const m = MOVES[p.move]
+      // A charged move: the low, gloomy stance while it charges, then the swing.
+      if (m.track && p.moveFrame <= m.startup - 6) return [CLIPS.crouchIdle, 'loop']
+      return [name, attackProgress(m, p.moveFrame, IMPACT[name] ?? 0.4)]
     }
     case 'cast': {
       // Scrubbed like an attack: the hand thrusts out exactly when the bolt leaves.
@@ -286,13 +311,22 @@ export function overrideClip(p, ctx = {}) {
     // Falling: a short drop keeps the jump's pose; a long one opens up into the
     // falling pose (arms up), ready for the landing.
     if (p.vel.y > -7) return [CLIPS.jump, 0.48 + 0.2 * clamp01(-p.vel.y / 7)]
-    return [CLIPS.fallLand, 0.05 + 0.12 * clamp01((-p.vel.y - 7) / 8)]
+    // A real fall: the falling idle (arms and legs reaching), looping.
+    return [CLIPS.fallIdle, 'loop']
   }
   // Landing: a crouch that soaks the fall; the harder the fall, the deeper and
   // longer (landing = { left, length } in seconds).
   if (ctx.landing?.left > 0) {
     const k = 1 - ctx.landing.left / ctx.landing.length
+    // A heavy landing: Mixamo's hard landing, down on one knee and back up.
+    if (ctx.landing.hard)
+      return [CLIPS.hardLanding, HARD_LANDING.from + (HARD_LANDING.to - HARD_LANDING.from) * k]
     return [CLIPS.fallLand, ctx.landing.from + (0.95 - ctx.landing.from) * k]
+  }
+  // Stopping from a run: the braking steps of Run To Stop.
+  if (ctx.stopping?.left > 0) {
+    const k = 1 - ctx.stopping.left / RUN_STOP.length
+    return [CLIPS.runToStop, (RUN_STOP.to * k) / RUN_STOP.duration]
   }
   return null
 }
@@ -303,21 +337,27 @@ export function loadHunterAsset(url = HUNTER_URL) {
 }
 
 // edge = the capsule fallback's colour, palette = 'hero' | 'enemy'.
-export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } = {}) {
+// scale: extra size for the look only (the Shadow Knight stands a little taller).
+export function createHunterFigure(
+  gltf,
+  { edge = '#22d3ee', palette = 'hero', scale: extra = 1 } = {},
+) {
   const pal = PALETTES[palette] ?? PALETTES.hero
   const model = cloneSkinned(gltf.scene)
 
   // Fit the model to the body's height (1.8 m), feet at its origin.
   model.updateMatrixWorld(true)
   const box = new THREE.Box3().setFromObject(model, true)
-  const scale = (2 * FOOT_OFFSET) / (box.max.y - box.min.y)
+  const scale = ((2 * FOOT_OFFSET) / (box.max.y - box.min.y)) * extra
   model.scale.setScalar(scale)
   model.position.y = -box.min.y * scale
 
   // Toon materials: the VRoid texture where there is one, else a colour by part.
   // The dummy is the same hunter, tinted crimson, with red eyes.
   const ramp = toonRamp()
-  const tint = new THREE.Color(palette === 'enemy' ? '#ff9a9a' : '#ffffff')
+  // The Shadow Knight: the same body sunk into shadow, eyes burning violet.
+  const dark = palette === 'shadow'
+  const tint = new THREE.Color(palette === 'enemy' ? '#ff9a9a' : dark ? '#3a3350' : '#ffffff')
   const made = []
   model.traverse((o) => {
     if (!o.isMesh) return
@@ -331,9 +371,15 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
         color: src.map
           ? eye && palette === 'enemy'
             ? new THREE.Color('#ff6070')
-            : tint
+            : eye && dark
+              ? new THREE.Color('#c9b8ff')
+              : tint
           : new THREE.Color(look.color),
-        emissive: eye ? new THREE.Color(pal.eye).multiplyScalar(0.6) : new THREE.Color(0x000000),
+        emissive: eye
+          ? new THREE.Color(dark ? '#9b6bff' : pal.eye).multiplyScalar(dark ? 2.2 : 0.6)
+          : dark
+            ? new THREE.Color('#120c22')
+            : new THREE.Color(0x000000),
         emissiveMap: eye ? (src.map ?? null) : null,
         gradientMap: ramp,
         transparent: src.transparent,
@@ -405,6 +451,8 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
   // The landing being played: { left, length, from } (seconds; clip fraction).
   const landing = { left: 0, length: 0, from: 0 }
   let fallSpeed = 0
+  const stopping = { left: 0 }
+  let runSpeed = 0
   let lastJumps = 0
   let sinceDouble = Infinity
   let nearW = 0 // fight stance weight (eased)
@@ -419,12 +467,27 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
     if (dt <= 0) return
     const speed = Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z)
     if (p.grounded && !wasGrounded && airTime > 0.2 && p.combat === 'free') {
-      // From a hop: a quick dip. From a big fall: FallLand's full crouch.
+      // From a hop: a quick dip. From a big fall (the sim's heavy landing): the
+      // hard landing, down on one knee.
       const hard = clamp01((fallSpeed - 6) / 10)
-      landing.length = 0.16 + 0.22 * hard
+      landing.hard = p.landLag > 0
+      landing.length = landing.hard ? HARD_LANDING.length : 0.16 + 0.22 * hard
       landing.left = landing.length
       landing.from = 0.62 - 0.3 * hard
     }
+    // Letting go of the stick at a run: brake through Run To Stop.
+    if (
+      p.grounded &&
+      p.combat === 'free' &&
+      runSpeed > 5 &&
+      speed < runSpeed - 0.6 &&
+      speed < 4.5 &&
+      stopping.left <= 0
+    )
+      stopping.left = RUN_STOP.length
+    if (speed > runSpeed + 0.3 || !p.grounded || p.combat !== 'free') stopping.left = 0
+    stopping.left = Math.max(0, stopping.left - dt)
+    runSpeed = speed
     if (!p.grounded) fallSpeed = Math.max(0, -p.vel.y)
     airTime = p.grounded ? 0 : airTime + dt
     wasGrounded = p.grounded
@@ -456,7 +519,7 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
       crouch.phase = (crouch.phase + (speed / CROUCH.stride / dur(CLIPS.crouchWalk)) * step) % 1
 
     // Override (attack, block, hit, dash, air...) fades in quickly.
-    const o = overrideClip(p, { landing, sinceDouble, near: ctx.near, crouch })
+    const o = overrideClip(p, { landing, sinceDouble, near: ctx.near, crouch, stopping })
     const target = o && has(o[0]) ? o[0] : null
     if (target !== lastOverride) loopTime = 0
     lastOverride = target

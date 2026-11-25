@@ -28,21 +28,26 @@ import { createEffects } from './effects.js'
 import { createControls } from './input.js'
 import { createShield } from './shield.js'
 import { createBolts } from './bolts.js'
+import { createParticles } from './particles.js'
+import { attachKatana } from './katana.js'
+import { MOVES } from './moves.js'
+import { FOOT_OFFSET } from './player.js'
 import { createFixedStep, stepsFor, STEP_S } from './loop.js'
 
-// A free third-person camera: it orbits the player wherever the mouse puts it
-// (click the arena to capture the mouse, Esc to let go; wheel zooms), like a
-// shooter or a 3D fighter. Nothing turns it for you. Near a wall it slides in
-// along its own line instead of being pinned, so it never sticks. The stick is
-// always relative to where the camera looks.
+// A steady third-person camera (Morrison, 25 Nov: "fixed again"): behind and
+// above the player at a fixed 25°, a half top-down view. The mouse only turns
+// it left and right (smoothed, so it never jerks); the wheel zooms. Near a wall
+// it slides in along its own line instead of being pinned. The stick is always
+// relative to where the camera looks.
 export const CAMERA = {
   distance: 9, // metres, horizontally, behind what it looks at
-  pitch: 0.38, // radians above horizontal (~22°)
+  pitch: 0.436, // radians above horizontal: 25°, fixed (the mouse does not tilt it)
   minPitch: -0.35, // a little below the player, looking up
   maxPitch: 1.35, // almost straight down
   minDistance: 4,
   maxDistance: 14,
-  sensitivity: 0.0025, // radians per pixel of mouse movement
+  sensitivity: 0.0022, // radians per pixel of mouse movement (left / right only)
+  yawEase: 14, // how quickly the view catches up with the mouse (1/s)
   zoomStep: 0.8, // metres per wheel notch
   lookHeight: 0.8,
   fov: 55,
@@ -78,7 +83,9 @@ export async function createArena(
     seed = 1,
     dummy = 'auto',
     loadout = undefined, // the player's stats + abilities from the server (stores/arena.js)
+    boss = null, // a boss slug to put in the room (if the server says you may face it)
     onHud = () => {},
+    onBossDefeated = () => {}, // ({ boss, ms }) once, when the boss falls
   } = {},
 ) {
   // --- renderer -------------------------------------------------------------
@@ -108,9 +115,15 @@ export async function createArena(
   scene.add(roomScene)
   const effects = createEffects(scene)
   const bolts = createBolts(scene)
+  const fx = createParticles(scene)
 
   // --- simulation -----------------------------------------------------------
-  const sim = createSimulation(room, { seed, dummy, loadout })
+  const sim = createSimulation(room, {
+    seed,
+    dummy: boss && dummy === 'auto' ? 'idle' : dummy,
+    loadout,
+    boss,
+  })
   // Keyboard on the window, mouse on the canvas (pointer lock needs an element).
   const keyboard = test ? null : createControls(window, renderer.domElement)
   const clock = createFixedStep()
@@ -127,10 +140,17 @@ export async function createArena(
   else console.warn('[arena] room kit failed to load, using the bare room', dressing.reason)
   const figures = sim.fighters.map((f) => {
     const isDummy = f.id === 'dummy'
-    const edge = isDummy ? room.colors.enemy : room.colors.trim
+    const isBoss = f.id === 'boss'
+    const edge = isDummy || isBoss ? room.colors.enemy : room.colors.trim
     const fig = gltf
-      ? createHunterFigure(gltf, { edge, palette: isDummy ? 'enemy' : 'hero' })
+      ? createHunterFigure(gltf, {
+          edge,
+          palette: isBoss ? 'shadow' : isDummy ? 'enemy' : 'hero',
+          scale: isBoss ? 1.12 : 1,
+        })
       : createCapsuleFigure({ edge })
+    // The Shadow Knight carries a katana (built in code, see katana.js).
+    if (isBoss && fig.kind === 'hunter') attachKatana(fig.object)
     if (room.shadows) {
       // Real shadows here: the fighters cast them, and the blob is not needed.
       fig.object.traverse((o) => {
@@ -143,7 +163,7 @@ export async function createArena(
   })
   // A guard shield per fighter, in their own colour.
   const shields = sim.fighters.map((f) => {
-    const sh = createShield(f.id === 'dummy' ? room.colors.enemy : room.colors.trim)
+    const sh = createShield(f.id === 'player' ? room.colors.trim : room.colors.enemy)
     scene.add(sh.object)
     return sh
   })
@@ -208,12 +228,109 @@ export async function createArena(
       }
     }
   }
+  // The fighters' states in the same order as sim.fighters / figures.
+  function statesOf(st) {
+    const out = [st.player]
+    if (st.dummy) out.push(st.dummy)
+    if (st.boss) out.push(st.boss)
+    return out
+  }
+
+  let bossDone = false
   function flushEvents() {
     for (const e of pending) {
       effects.spawn(e)
       if (e.type === 'block') shields[fighterIndex[e.target]]?.hit()
+      vfxEvent(e)
+      if (e.type === 'boss-defeated' && !bossDone) {
+        bossDone = true
+        onBossDefeated({ boss: e.boss, ms: e.ms })
+      }
     }
     pending = []
+  }
+
+  // --- VFX: particles from events and from what the fighters are doing --------
+  const SHADOW_MOVES = new Set(['KNIGHT_RUSH', 'KNIGHT_SLASH', 'SHADOW_SLASH'])
+  function vfxEvent(e) {
+    if (e.type === 'fizzle') return fx.explosion(e)
+    if (e.type === 'boss-defeated') {
+      const b = sim.state().boss
+      if (b) {
+        fx.impact({ x: b.pos.x, y: b.pos.y, z: b.pos.z, color: '#9b7bff', heavy: true })
+        for (let i = 0; i < 40; i++)
+          fx.darkWisp({ x: b.pos.x, y: b.pos.y - 1, z: b.pos.z, strength: 2 })
+      }
+      return
+    }
+    if (e.x === undefined) return
+    const shadow = SHADOW_MOVES.has(e.move)
+    const color = e.fire
+      ? '#ff9a4a'
+      : shadow
+        ? '#a58bff'
+        : e.attacker === 'player'
+          ? '#ffd27a'
+          : '#ff7a8a'
+    if (e.type === 'block') fx.block({ ...e, color: '#7fe9ff' })
+    else if (e.type === 'guardbreak') fx.guardBreak(e)
+    else if (e.fire) fx.explosion(e)
+    else fx.impact({ ...e, color, heavy: e.heavy || e.type === 'ko' || shadow })
+  }
+
+  // Per fighter: what it was doing last frame, to spot landings and new rolls.
+  const seen = sim.fighters.map(() => ({ grounded: true, vy: 0, combat: 'free', t: 0 }))
+  function vfxFrame(dt) {
+    if (dt <= 0) return
+    const st = sim.state()
+    statesOf(st).forEach((p, i) => {
+      const was = seen[i]
+      const feet = p.pos.y - FOOT_OFFSET
+      // Landing: dust, more for a harder fall.
+      if (p.grounded && !was.grounded && was.vy < -5)
+        fx.dust({ x: p.pos.x, y: feet, z: p.pos.z, strength: Math.min(1.6, (-was.vy - 4) / 9) })
+      // Rolling and rushing kick up dust behind them.
+      was.t += dt
+      const rushing =
+        p.combat === 'attack' && MOVES[p.move]?.rush && p.moveFrame > MOVES[p.move].startup
+      if ((p.combat === 'dash' || rushing) && was.t > 0.035) {
+        was.t = 0
+        fx.puff({ x: p.pos.x, y: feet + 0.2, z: p.pos.z })
+        if (rushing && SHADOW_MOVES.has(p.move))
+          for (let k = 0; k < 3; k++)
+            fx.darkWisp({ x: p.pos.x, y: feet, z: p.pos.z, strength: 1.3 })
+      }
+      if (p.combat === 'dash' && was.combat !== 'dash')
+        fx.dust({ x: p.pos.x, y: feet, z: p.pos.z, strength: 0.6 })
+      // The Shadow Knight: a constant dark aura; charging the rush, runes on the
+      // floor and the aura boiling up.
+      if (sim.fighters[i].id === 'boss' && p.combat !== 'ko') {
+        const charging =
+          p.combat === 'attack' &&
+          p.move === 'KNIGHT_RUSH' &&
+          p.moveFrame <= MOVES.KNIGHT_RUSH.startup
+        const n = charging ? 5 : 1.2
+        for (let k = 0; k < n * dt * 30; k++)
+          fx.darkWisp({ x: p.pos.x, y: feet, z: p.pos.z, strength: charging ? 1.8 : 1 })
+        if (charging)
+          fx.runes({ x: p.pos.x, z: p.pos.z, t: p.moveFrame / MOVES.KNIGHT_RUSH.startup })
+      }
+      // Your Shadow slash charging: a smaller violet glow.
+      if (
+        p.combat === 'attack' &&
+        p.move === 'SHADOW_SLASH' &&
+        p.moveFrame <= MOVES.SHADOW_SLASH.startup
+      )
+        for (let k = 0; k < 2; k++)
+          fx.sparkle({ x: p.pos.x, y: p.pos.y, z: p.pos.z, color: '#a58bff' })
+      was.grounded = p.grounded
+      was.vy = p.vel.y
+      was.combat = p.combat
+    })
+    // Fire bolts leave a trail of flame.
+    for (const pr of st.projectiles)
+      if (pr.kind === 'fire_bolt') for (let k = 0; k < 2; k++) fx.fireTrail(pr)
+    fx.update(dt)
   }
 
   // --- camera ---------------------------------------------------------------
@@ -224,6 +341,7 @@ export async function createArena(
   // Mouse-controlled orbit. yaw 0 = looking towards -z.
   const view = { yaw: 0, pitch: CAMERA.pitch, distance: CAMERA.distance }
   const camDir = { x: 0, z: -1 } // horizontal look direction, from yaw
+  let yawTarget = 0 // where the mouse wants the view; view.yaw eases towards it
   function setView(yaw, pitch, distance) {
     view.yaw = yaw
     view.pitch = Math.max(CAMERA.minPitch, Math.min(CAMERA.maxPitch, pitch))
@@ -243,11 +361,13 @@ export async function createArena(
     }))
     figures.forEach((fig, i) => fig.place(pos[i], lerpAngle(prev[i].yaw, curr[i].yaw, alpha)))
     const st = sim.state()
-    shields.forEach((sh, i) => sh.update(i === 0 ? st.player : st.dummy, pos[i], dt))
+    const states = statesOf(st)
+    shields.forEach((sh, i) => sh.update(states[i], pos[i], dt))
     bolts.sync(st.projectiles)
     effects.update(dt)
     elapsed += dt
     bolts.update(dt, elapsed)
+    vfxFrame(dt)
 
     const me = pos[0]
     camY =
@@ -288,8 +408,13 @@ export async function createArena(
       const dz = st.dummy.pos.z - st.player.pos.z
       near = dx * dx + dz * dz < STANCE_RANGE * STANCE_RANGE && st.dummy.combat !== 'ko'
     }
-    figures[0].update(st.player, dt, { near })
-    if (figures[1] && st.dummy) figures[1].update(st.dummy, dt, { near })
+    if (st.boss && st.boss.combat !== 'ko') {
+      const dx = st.boss.pos.x - st.player.pos.x
+      const dz = st.boss.pos.z - st.player.pos.z
+      near = near || dx * dx + dz * dz < (STANCE_RANGE + 4) ** 2
+    }
+    const states = statesOf(st)
+    figures.forEach((fig, i) => fig.update(states[i], dt, { near: i === 0 ? near : true }))
   }
 
   // --- HUD ------------------------------------------------------------------
@@ -320,13 +445,13 @@ export async function createArena(
       // Read the keys only when the simulation will actually step, so a quick
       // tap on a fast monitor (frames with no step) is not read and lost.
       const m = keyboard.look()
-      if (m.dx || m.dy || m.wheel) {
-        setView(
-          view.yaw - m.dx * CAMERA.sensitivity,
-          view.pitch + m.dy * CAMERA.sensitivity,
-          view.distance + m.wheel * CAMERA.zoomStep,
-        )
-      }
+      yawTarget -= m.dx * CAMERA.sensitivity
+      const ease = Math.min(1, (delta / 1000) * CAMERA.yawEase)
+      setView(
+        view.yaw + (yawTarget - view.yaw) * ease,
+        CAMERA.pitch,
+        view.distance + m.wheel * CAMERA.zoomStep,
+      )
       if (steps > 0) sim.setInput({ ...keyboard.controls(), view: { ...camDir } })
       for (let i = 0; i < steps; i++) stepOnce()
       flushEvents()
@@ -358,6 +483,7 @@ export async function createArena(
         flushEvents()
         animate(STEP_S)
         effects.update(STEP_S)
+        vfxFrame(STEP_S)
       }
       roomScene.userData.update(sim.state().time)
       draw(1, 0)
@@ -406,10 +532,20 @@ export async function createArena(
     },
     seed: (n) => sim.seed(n),
     dummy: (mode) => sim.setDummyMode(mode),
+    // Tests only: nothing hits the player for this many frames.
+    invuln(frames) {
+      sim.fighters[0].c.invuln = frames
+    },
+    // Tests only: set the boss's health (to finish a fight quickly).
+    bossHp(hp) {
+      const b = sim.fighters.find((f) => f.id === 'boss')
+      if (b) b.c.hp = Math.max(1, Math.min(b.c.maxHp, hp))
+    },
     // Point the camera: yaw/pitch in degrees (yaw 0 = looking towards -z), distance
     // in metres. The stick follows it, as with the mouse.
     camera({ yaw = 0, pitch = (CAMERA.pitch * 180) / Math.PI, distance = CAMERA.distance } = {}) {
       setView((yaw * Math.PI) / 180, (pitch * Math.PI) / 180, distance)
+      yawTarget = view.yaw
       sim.setInput({ view: { ...camDir } })
       draw(1, 0)
       return { ...camDir }
@@ -425,6 +561,7 @@ export async function createArena(
     // Place the player (or the dummy) anywhere. Clears velocity.
     teleport(pos, who = 'player') {
       if (who === 'dummy') sim.teleportDummy(pos)
+      else if (who === 'boss') sim.teleportBoss(pos)
       else sim.teleport(pos)
       remember(prev)
       remember(curr)
@@ -461,6 +598,7 @@ export async function createArena(
       dummyClip: figures[1]?.current?.() ?? null,
       shield: shields.map((sh) => sh.size()),
       sparks: effects.count(),
+      particles: fx.count(),
       bolts: bolts.count(),
       drawCalls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
@@ -481,6 +619,7 @@ export async function createArena(
     for (const sh of shields) sh.dispose()
     effects.dispose()
     bolts.dispose()
+    fx.dispose()
     disposeTree(scene)
     bloom.dispose()
     composer.dispose()

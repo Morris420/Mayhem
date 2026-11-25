@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\Achievement;
 use App\Models\Skill;
 use App\Models\SkillXp;
 use App\Models\User;
 use App\Support\Arena\ArenaRules;
 use App\Support\SkillCurve;
+use Database\Seeders\AchievementSeeder;
 use Database\Seeders\SkillSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -19,6 +21,7 @@ class ArenaLoadoutTest extends TestCase
     {
         parent::setUp();
         $this->seed(SkillSeeder::class);
+        $this->seed(AchievementSeeder::class);
     }
 
     private function as(User $user): static
@@ -49,7 +52,8 @@ class ArenaLoadoutTest extends TestCase
 
         $r->assertJsonPath('stats.health', ArenaRules::stat('health', 1));
         $r->assertJsonPath('stats.damage', ArenaRules::stat('damage', 1));
-        $r->assertJsonPath('stats.mana', ArenaRules::MANA);
+        $r->assertJsonMissingPath('stats.mana'); // no mana any more
+        $r->assertJsonPath('bosses.0.available', false);
         $r->assertJsonPath('abilities.0.slug', 'fire_bolt');
         $r->assertJsonPath('abilities.0.unlocked', true);
         $r->assertJsonCount(3, 'abilities');
@@ -70,5 +74,51 @@ class ArenaLoadoutTest extends TestCase
 
         // Someone else's training never leaks into your fighter.
         $this->as($other)->getJson('/api/arena/loadout')->assertJsonPath('stats.damage', 85);
+    }
+
+    private function marathoner(): User
+    {
+        $u = User::factory()->create();
+        $u->achievements()->attach(Achievement::where('slug', 'golden-medal')->value('id'), ['unlocked_at' => now()]);
+
+        return $u;
+    }
+
+    public function test_the_shadow_knight_needs_the_marathon(): void
+    {
+        $this->as(User::factory()->create())
+            ->postJson('/api/arena/bosses/shadow_knight/defeat', ['duration_ms' => 60000])
+            ->assertForbidden();
+        $this->as($this->marathoner())->getJson('/api/arena/loadout')->assertJsonPath('bosses.0.available', true);
+    }
+
+    public function test_beating_the_shadow_knight_unlocks_shadow_slash_once(): void
+    {
+        $u = $this->marathoner();
+        $r = $this->as($u)->postJson('/api/arena/bosses/shadow_knight/defeat', ['duration_ms' => 61000])->assertOk();
+        $r->assertJsonPath('first', true)->assertJsonPath('unlocked', 'shadow_slash');
+        $r->assertJsonPath('loadout.abilities.1.slug', 'shadow_slash');
+        $r->assertJsonPath('loadout.abilities.1.unlocked', true);
+        $r->assertJsonPath('loadout.bosses.0.defeated', true);
+
+        $again = $this->as($u)->postJson('/api/arena/bosses/shadow_knight/defeat', ['duration_ms' => 40000])->assertOk();
+        $again->assertJsonPath('first', false)->assertJsonPath('unlocked', null);
+        $this->assertDatabaseHas('arena_boss_defeats', ['user_id' => $u->id, 'boss' => 'shadow_knight', 'wins' => 2, 'best_ms' => 40000]);
+    }
+
+    public function test_impossible_wins_and_unknown_bosses_are_refused(): void
+    {
+        $u = $this->marathoner();
+        $this->as($u)->postJson('/api/arena/bosses/shadow_knight/defeat', ['duration_ms' => 2000])->assertStatus(422);
+        $this->as($u)->postJson('/api/arena/bosses/nobody/defeat', ['duration_ms' => 60000])->assertNotFound();
+        $this->assertDatabaseCount('arena_boss_defeats', 0);
+    }
+
+    public function test_the_grant_command_gives_an_achievement(): void
+    {
+        User::factory()->create(['username' => 'JohnDoe']);
+        $this->artisan('mayhem:grant-achievement', ['username' => 'JohnDoe', 'slug' => 'golden-medal'])->assertSuccessful();
+        $this->assertTrue(User::where('username', 'JohnDoe')->first()->achievements()->where('slug', 'golden-medal')->exists());
+        $this->artisan('mayhem:grant-achievement', ['username' => 'Nobody', 'slug' => 'golden-medal'])->assertFailed();
     }
 }

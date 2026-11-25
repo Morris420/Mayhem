@@ -30,6 +30,7 @@ const room = {
 
   spawn: { x: 0, y: 2.5, z: 6 },
   dummySpawn: { x: 0, y: 1.2, z: -2 },
+  bossSpawn: { x: 0, y: 1.2, z: -6 },
 
   model: '/models/arena/church.glb',
   drawWalls: false,

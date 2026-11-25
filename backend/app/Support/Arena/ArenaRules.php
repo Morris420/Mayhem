@@ -28,19 +28,29 @@ class ArenaRules
         'ability_power' => ['intellect', 100, 15],
     ];
 
-    /** Mana is the same for everyone for now: abilities differ by what you unlocked, not by pool size. */
-    public const MANA = 100;
-
     /**
-     * The abilities, in slot order (Q, E, R): [slug, name, skill, level needed, built yet].
+     * The abilities, in slot order (Q, E, R): [slug, name, skill, level needed, built yet, boss].
      * `built` = false means it is shown in the HUD as coming but cannot be cast yet.
+     * `boss` = the boss you must beat to unlock it (null = the skill level alone unlocks it).
      * Fire bolt is every hunter's first spell (Intellect 1), so there is always something to try.
+     * No mana (Morrison, 25 Nov): abilities are limited by their cooldowns only.
      */
     public const ABILITIES = [
-        ['fire_bolt', 'Fire bolt', 'intellect', 1, true],
-        ['second_wind', 'Second wind', 'faith', 10, false],
-        ['iron_skin', 'Iron skin', 'discipline', 20, false],
+        ['fire_bolt', 'Fire bolt', 'intellect', 1, true, null],
+        ['shadow_slash', 'Shadow slash', 'strength', 1, true, 'shadow_knight'],
+        ['iron_skin', 'Iron skin', 'discipline', 20, false, null],
     ];
+
+    /**
+     * Bosses: slug => [name, achievement slug needed to face it, ability it unlocks].
+     * The Shadow Knight waits for hunters who ran a marathon.
+     */
+    public const BOSSES = [
+        'shadow_knight' => ['Shadow Knight', 'golden-medal', 'shadow_slash'],
+    ];
+
+    /** A reported win faster than this is not believed (the knight has 400 health). */
+    public const MIN_BOSS_FIGHT_MS = 15000;
 
     public const KEYS = ['Q', 'E', 'R'];
 

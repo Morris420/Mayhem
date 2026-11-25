@@ -457,7 +457,7 @@ Morrison's own VRoid/Mixamo hunter you move with WASD, sprint with Shift and jum
 mid-air you can cling to a wall and kick off it. Space again in the air is a double jump. You look
 around with the mouse (click the arena to capture it) and fight with left click (light: jab,
 cross, uppercut), right click (heavy), F (hold to guard: a shield sphere that shrinks as the
-guard meter drains, and breaks at zero), C (dash), X (hold to crouch), the wheel click (guard, like F) and T (emote), against a training dummy that wanders,
+guard meter drains, and breaks at zero), C (dash), X (hold to crouch), the wheel click (guard, like F), Q / E (fire bolt / Shadow slash) and T (emote), against a training dummy that wanders,
 attacks, blocks and dashes on the same rules.
 
 **Milestone C (stats and abilities):** your fighter comes from your skills. `GET /api/arena/loadout`

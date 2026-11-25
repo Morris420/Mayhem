@@ -130,6 +130,69 @@ export const MOVES = {
 // Total length of a move in frames.
 export const moveFrames = (m) => m.startup + m.active + m.recovery
 
+// --- techniques and the Shadow Knight's moves ---------------------------------
+//   rush    m/s the move carries you forward through its active frames
+//   track   while charging, keep turning towards the target until this many
+//           frames before it fires (then it is committed: dodge it)
+Object.assign(MOVES, {
+  // The player's Shadow slash (unlocked by beating the Shadow Knight).
+  SHADOW_SLASH: {
+    name: 'Shadow slash',
+    guard: 40,
+    startup: 18,
+    active: 10,
+    recovery: 22,
+    damage: 16,
+    hitstun: 30,
+    blockstun: 16,
+    push: 6,
+    hitstop: 9,
+    range: 1.2,
+    radius: 0.8,
+    rush: 15,
+    track: 4,
+    knockdown: true,
+    launch: 6,
+  },
+  // The Shadow Knight's only swing: slow, wide, hurts.
+  KNIGHT_SLASH: {
+    name: 'Katana slash',
+    guard: 30,
+    startup: 22,
+    active: 6,
+    recovery: 28,
+    damage: 12,
+    hitstun: 22,
+    blockstun: 14,
+    push: 4,
+    hitstop: 7,
+    range: 1.5,
+    radius: 0.85,
+    lunge: 3,
+  },
+  // His signature: a gloomy charge (a full second, aiming at you), then a huge
+  // dash forward with both hands on the katana. Committed 12 frames before it
+  // fires: roll through it (i-frames), sidestep it, or block it and lose your guard.
+  KNIGHT_RUSH: {
+    name: 'Gloom rush',
+    guard: 70,
+    startup: 60,
+    active: 16,
+    recovery: 44,
+    damage: 26,
+    hitstun: 40,
+    blockstun: 24,
+    push: 8,
+    hitstop: 12,
+    range: 1.3,
+    radius: 0.9,
+    rush: 20,
+    track: 12,
+    knockdown: true,
+    launch: 7,
+  },
+})
+
 // Reach grows with the hunter (SIZE in player.js), so a bigger body still lands
 // its punches where the fist visibly is.
 for (const m of Object.values(MOVES)) {
@@ -143,12 +206,12 @@ export const COMBAT = {
   blockArc: 0.5, // cos of the half-angle you can block in: 0.5 = 60° each side. Behind you is open.
   // The dash is a committed roll (Morrison, 25 Nov): a hop, a full roll, and no
   // other input until it is over.
-  // Timed to Mixamo's Run To Rolling: dive, roll over, back on your feet.
-  dashSpeed: 5.2, // m/s: ~4 m over the roll
+  // Timed to Mixamo's Run To Rolling: dive, roll over, back on your feet. The
+  // speed follows the animation frame by frame (combat.js rollSpeed): ~3.4 m.
   dashHop: 0, // the animation does the lifting; the body stays on the floor
   dashFrames: 54, // total (0.9 s), including getting up; nothing else until it ends
-  dashMoveFrames: 46, // frames of the dash that actually travel
-  dashBrake: 0.1, // speed kept when the roll ends (0 = dead stop)
+  dashExitEarly: 9, // the last frames: holding a direction runs you straight out of it
+  roll: { push: 3, dive: 7, diveEnd: 16, rolling: 2.6, rollEnd: 32, stop: 44 },
   dashInvuln: 18, // frames at the start of a dash where nothing hits you
   dashCooldown: 10, // frames after the roll before the next one
   knockdownFrames: 45, // lying on the floor

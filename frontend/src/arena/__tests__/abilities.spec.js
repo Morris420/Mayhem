@@ -1,6 +1,6 @@
 // @vitest-environment node
 // Milestone C, headless: the server's loadout as fighter options, and the fire
-// bolt — hit, block, dodge, sidestep, cooldown, mana, interrupt, walls, rewind.
+// bolt — hit, block, dodge, homing, sidestep, cooldown, interrupt, walls, rewind.
 import { describe, expect, it } from 'vitest'
 import room from '@/arena/rooms/training-hall'
 import { createSimulation } from '@/arena/sim'
@@ -16,10 +16,10 @@ const BOLT = ABILITIES.fire_bolt
 // The shape GET /api/arena/loadout returns.
 function loadout(stats = {}, { bolt = true } = {}) {
   return {
-    stats: { health: 100, guard: 100, damage: 100, ability_power: 100, mana: 100, ...stats },
+    stats: { health: 100, guard: 100, damage: 100, ability_power: 100, ...stats },
     abilities: [
       { slug: 'fire_bolt', slot: 1, key: 'Q', unlocked: bolt, built: true },
-      { slug: 'second_wind', slot: 2, key: 'E', unlocked: false, built: false },
+      { slug: 'shadow_slash', slot: 2, key: 'E', unlocked: false, built: true },
     ],
   }
 }
@@ -45,10 +45,10 @@ const fire = (ev) => ev.filter((e) => e.move === 'fire_bolt')
 describe('loadout from the server', () => {
   it('slots only unlocked abilities this client knows; junk falls back to the base', () => {
     const lo = fighterLoadout({
-      stats: { health: 118, guard: '91', damage: 112, ability_power: 'x', mana: 100 },
+      stats: { health: 118, guard: '91', damage: 112, ability_power: 'x' },
       abilities: [
         { slug: 'fire_bolt', slot: 1, unlocked: true },
-        { slug: 'second_wind', slot: 2, unlocked: false },
+        { slug: 'shadow_slash', slot: 2, unlocked: false },
         { slug: 'meteor', slot: 3, unlocked: true }, // not a thing (yet)
       ],
     })
@@ -57,16 +57,15 @@ describe('loadout from the server', () => {
       guard: 91,
       damage: 112,
       power: BASE_LOADOUT.stats.ability_power,
-      mana: 100,
       slots: ['fire_bolt', null, null],
     })
     expect(fighterLoadout(null).slots).toEqual([null, null, null])
     expect(fighterLoadout({ stats: { health: -5 } }).hp).toBe(1)
   })
 
-  it('health, guard and mana pools come from the loadout', () => {
-    const st = face(3, { lo: loadout({ health: 83, guard: 117, mana: 90 }) }).state().player
-    expect([st.hp, st.maxHp, st.guardMax, st.manaMax]).toEqual([83, 83, 117, 90])
+  it('health and guard pools come from the loadout (no mana)', () => {
+    const st = face(3, { lo: loadout({ health: 83, guard: 117 }) }).state().player
+    expect([st.hp, st.maxHp, st.guardMax, st.mana]).toEqual([83, 83, 117, undefined])
     expect(st.slots).toEqual(['fire_bolt', null, null])
   })
 
@@ -92,13 +91,12 @@ describe('loadout from the server', () => {
 })
 
 describe('fire bolt', () => {
-  it('flies and hits at range: damage x ability power, mana spent, cooldown running', () => {
+  it('flies and hits at range: damage x ability power, cooldown running', () => {
     const sim = face(6, { lo: loadout({ ability_power: 115 }) })
     sim.press('ability1')
     sim.step()
     let st = sim.state()
     expect(st.player.combat).toBe('cast')
-    expect(st.player.mana).toBe(100 - BOLT.cost) // full (regen capped), then the cost
     expect(st.player.cooldowns[0]).toBe(BOLT.cooldown)
     expect(st.projectiles).toHaveLength(0) // still winding up
 
@@ -160,32 +158,36 @@ describe('fire bolt', () => {
     expect(sim.state().dummy.hp).toBe(100)
   })
 
-  it('a sidestep out of its line makes it miss', () => {
-    const sim = face(9)
+  it('homes in a little: a small sidestep still gets hit, a big one late does not', () => {
+    // Small step early: the bolt curves back in.
+    let sim = face(9)
     sim.press('ability1')
-    run(sim, 300) // released and flying straight down the line
-    expect(sim.state().projectiles).toHaveLength(1)
+    run(sim, 300)
     sim.teleportDummy({ x: D.x + 1.6, y: STAND, z: D.z })
-    const ev = run(sim, 1500)
-    expect(fire(ev).filter((e) => e.type === 'hit')).toHaveLength(0)
+    expect(fire(run(sim, 1500)).filter((e) => e.type === 'hit')).toHaveLength(1)
+    // Far to the side when it is already close: it can't turn that hard, it misses.
+    sim = face(9)
+    sim.press('ability1')
+    for (let i = 0; i < 200; i++) {
+      sim.step()
+      const p = sim.state().projectiles[0]
+      if (p && p.z - D.z < 2.5) break
+    }
+    sim.teleportDummy({ x: D.x + 3, y: STAND, z: D.z })
+    expect(fire(run(sim, 1500)).filter((e) => e.type === 'hit')).toHaveLength(0)
   })
 
-  it('has a cooldown, and needs the mana', () => {
+  it('has a cooldown (2.5 s), and nothing else limits it', () => {
     const sim = face(6)
     sim.press('ability1')
-    run(sim, 700) // cast over, cooldown (1.5 s) still running
+    run(sim, 1500) // cast over, cooldown still running
     sim.press('ability1')
     sim.step()
     expect(sim.state().player.combat).toBe('free')
-    run(sim, 1000)
+    run(sim, 1100)
     sim.press('ability1')
     sim.step()
     expect(sim.state().player.combat).toBe('cast')
-
-    const poor = face(6, { lo: loadout({ mana: BOLT.cost - 1 }) })
-    poor.press('ability1')
-    poor.step()
-    expect(poor.state().player.combat).toBe('free')
   })
 
   it('does nothing when the ability is not unlocked', () => {
@@ -193,11 +195,10 @@ describe('fire bolt', () => {
     sim.press('ability1')
     const ev = run(sim, 1000)
     expect(sim.state().player.combat).toBe('free')
-    expect(sim.state().player.mana).toBe(100)
     expect(fire(ev)).toHaveLength(0)
   })
 
-  it('a hit during the wind-up interrupts the cast: no bolt, mana gone', () => {
+  it('a hit during the wind-up interrupts the cast: no bolt', () => {
     const sim = face(1.2, { mode: 'attack' })
     sim.press('ability1')
     const ev = run(sim, 600)

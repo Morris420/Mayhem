@@ -46,7 +46,9 @@ const room = {
   ],
 
   spawn: { x: 0, y: 2.5, z: 8 },
-  dummySpawn: { x: 0, y: 1.2, z: 0 },
+  dummySpawn: { x: -6, y: 1.2, z: 2 },
+  // Where a boss appears (if you have earned the fight): the far end of the floor.
+  bossSpawn: { x: 0, y: 1.2, z: -8 },
 
   // The look: navy, with glowing white-blue grid lines; bright, clean light with
   // real shadows so movement reads clearly.

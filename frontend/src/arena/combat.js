@@ -36,7 +36,7 @@ const UNHITTABLE = new Set(['down', 'getup', 'ko'])
 // *input* to the simulation. Without one: the base numbers and no abilities.
 export function createFighter(
   world,
-  { id, spawn, facing = { x: 0, z: -1 }, loadout = BASE_LOADOUT },
+  { id, spawn, facing = { x: 0, z: -1 }, loadout = BASE_LOADOUT, team = 'hero', respawns = true },
 ) {
   const body = createPlayer(world, spawn)
   body.state.facing = { x: facing.x, z: facing.z }
@@ -64,8 +64,9 @@ export function createFighter(
     damage: lo.damage, // % of the frame data's damage your hits deal
     power: lo.power, // % of an ability's damage
     slots: lo.slots, // ability ids in slots 1-3 (Q / E / R), null = empty
-    mana: lo.mana,
-    manaMax: lo.mana,
+    team, // fighters on the same team never hit each other ('hero' | 'enemy')
+    respawns, // false = a KO is final (a boss stays down)
+    dashDir: { x: 0, z: 0 }, // the roll's direction, fixed for the whole roll
     cooldowns: [0, 0, 0], // frames left per slot
     cast: null, // slot (0-2) being cast
     castFrame: 0,
@@ -80,7 +81,7 @@ function nearestOpponent(f, fighters) {
   let best = null
   const p = f.body.state.pos
   for (const o of fighters) {
-    if (o === f || o.c.state === 'ko') continue
+    if (o === f || o.c.state === 'ko' || o.c.team === f.c.team) continue
     const q = o.body.state.pos
     const dx = q.x - p.x
     const dz = q.z - p.z
@@ -113,6 +114,19 @@ function startMove(f, id, opp) {
   }
 }
 
+// Roll speed (m/s) at frame k of the dash, shaped after Mixamo's Run To Rolling:
+// a quick push-off, the dive, the roll slowing over the shoulder, then standing.
+// Piecewise linear in k, so it is exact and identical everywhere.
+export function rollSpeed(k) {
+  const R = COMBAT.roll
+  if (k < R.push) return R.dive * ((k + 1) / R.push)
+  if (k < R.diveEnd) return R.dive
+  if (k < R.rollEnd)
+    return R.dive + (R.rolling - R.dive) * ((k - R.diveEnd) / (R.rollEnd - R.diveEnd))
+  if (k < R.stop) return R.rolling * (1 - (k - R.rollEnd) / (R.stop - R.rollEnd))
+  return 0
+}
+
 function startDash(f, ctl) {
   const c = f.c
   const s = f.body.state
@@ -128,13 +142,15 @@ function startDash(f, ctl) {
     dx /= len
     dz /= len
   }
-  s.vel.x = dx * COMBAT.dashSpeed
-  s.vel.z = dz * COMBAT.dashSpeed
+  c.dashDir.x = dx
+  c.dashDir.z = dz
+  s.vel.x = dx * rollSpeed(0)
+  s.vel.z = dz * rollSpeed(0)
   if (COMBAT.dashHop > 0) {
     s.vel.y = COMBAT.dashHop
     s.grounded = false
   }
-  s.lock = COMBAT.dashMoveFrames / 60
+  s.lock = COMBAT.dashFrames / 60 // the roll steers itself (rollSpeed); the stick waits
   c.state = 'dash'
   c.timer = COMBAT.dashFrames
   c.invuln = COMBAT.dashInvuln
@@ -154,7 +170,6 @@ function respawn(f) {
   c.queued = null
   c.juggle = 0
   c.invuln = 30
-  c.mana = c.manaMax
   c.cooldowns = [0, 0, 0]
   c.cast = null
 }
@@ -225,7 +240,12 @@ export function stepFighter(f, ctl, fighters, dt) {
     if (ctl.abilitySlot < 0) return false
     useBuffer()
     if (!canCast(f, ctl.abilitySlot)) return false
-    startCast(f, ctl.abilitySlot, opp)
+    const ab = ABILITIES[c.slots[ctl.abilitySlot]]
+    if (ab.move) {
+      // A technique: the cooldown starts, then it is a move like any other.
+      c.cooldowns[ctl.abilitySlot] = ab.cooldown
+      startMove(f, ab.move, opp)
+    } else startCast(f, ctl.abilitySlot, opp)
     return true
   }
   const keepFacing = { x: s.facing.x, z: s.facing.z }
@@ -233,7 +253,8 @@ export function stepFighter(f, ctl, fighters, dt) {
   // --- timers and transitions ---
   switch (c.state) {
     case 'ko':
-      if (--c.timer <= 0) respawn(f)
+      if (c.timer > 0) c.timer--
+      if (c.timer <= 0 && c.respawns) respawn(f)
       break
     case 'down':
       if (--c.timer <= 0) {
@@ -242,14 +263,23 @@ export function stepFighter(f, ctl, fighters, dt) {
         c.invuln = COMBAT.getupFrames
       }
       break
-    case 'dash':
-      // The burst is over: brake hard instead of sliding on for metres.
-      if (c.timer === COMBAT.dashFrames - COMBAT.dashMoveFrames) {
-        s.vel.x *= COMBAT.dashBrake
-        s.vel.z *= COMBAT.dashBrake
+    case 'dash': {
+      // The roll's speed follows the animation: a fast dive, then the roll over
+      // the shoulder slowing down, then back on your feet (rollSpeed).
+      const k = COMBAT.dashFrames - c.timer // frames into the roll
+      const v = rollSpeed(k)
+      s.vel.x = c.dashDir.x * v
+      s.vel.z = c.dashDir.z * v
+      c.timer--
+      // Getting up with the stick held: run straight out of it (the renderer
+      // blends the stand-up into the run).
+      const moving = ctl.mx * ctl.mx + ctl.mz * ctl.mz > 0.04
+      if (c.timer <= 0 || (moving && c.timer <= COMBAT.dashExitEarly)) {
+        c.state = 'free'
+        s.lock = 0
       }
-      if (--c.timer <= 0) c.state = 'free'
       break
+    }
     case 'getup':
     case 'hitstun':
     case 'blockstun':
@@ -287,6 +317,17 @@ export function stepFighter(f, ctl, fighters, dt) {
     case 'attack': {
       const m = MOVES[c.move]
       c.moveFrame++
+      // A rush: the move itself carries you forward through its active frames.
+      if (m.rush) {
+        if (c.moveFrame === m.startup + 1) {
+          s.vel.x = s.facing.x * m.rush
+          s.vel.z = s.facing.z * m.rush
+          s.lock = m.active / 60
+        } else if (c.moveFrame === m.startup + m.active + 1) {
+          s.vel.x *= 0.2
+          s.vel.z *= 0.2
+        }
+      }
       const btn = ctl.lightPressed ? 'light' : ctl.heavyPressed ? 'heavy' : null
       if (btn && m.next?.[btn] && !c.queued) {
         c.queued = m.next[btn]
@@ -307,7 +348,8 @@ export function stepFighter(f, ctl, fighters, dt) {
   }
 
   if (c.state === 'free') {
-    if (ctl.dashPressed && s.grounded && c.dashCd === 0) startDash(f, ctl)
+    if (ctl.special && s.grounded && MOVES[ctl.special]) startMove(f, ctl.special, opp)
+    else if (ctl.dashPressed && s.grounded && c.dashCd === 0) startDash(f, ctl)
     else if (s.grounded && tryCast()) {
       // casting now
     } else if (ctl.lightPressed) {
@@ -342,6 +384,11 @@ export function stepFighter(f, ctl, fighters, dt) {
     if (opp && opp.d < COMBAT.blockFaceRange && opp.d > 1e-6) face = { x: opp.x, z: opp.z }
   } else if (c.state === 'attack' && MOVES[c.move].air) {
     move = { x: ctl.mx, z: ctl.mz } // keep steering a jump attack
+  } else if (c.state === 'attack' && MOVES[c.move].track && opp) {
+    // A charged move keeps turning towards its target while it charges, then
+    // commits: the last `track` frames before it fires, it no longer turns.
+    const m = MOVES[c.move]
+    if (c.moveFrame <= m.startup - m.track) face = { x: opp.x, z: opp.z }
   }
   f.body.update(dt, { move, sprint, jumpHeld: jump, jumpPressed, face, crouch })
   return release
@@ -410,7 +457,7 @@ function landHit(t, m, damage, from, dir) {
     tc.state === 'hitstun' || tc.state === 'down' || tc.state === 'guardbreak' ? tc.juggle + 1 : 1
   tc.move = null
   tc.queued = null
-  tc.cast = null // a hit interrupts a cast: the mana is gone
+  tc.cast = null // a hit interrupts a cast: the cooldown is spent anyway
   ts.vel.x = dir.x * m.push
   ts.vel.z = dir.z * m.push
   if (tc.hp === 0 || m.knockdown) {
@@ -448,7 +495,7 @@ export function resolveHits(fighters) {
     const reach = m.radius + MOVE.radius
 
     for (const t of fighters) {
-      if (t === a || !canBeHit(t) || c.hitDone) continue
+      if (t === a || t.c.team === c.team || !canBeHit(t) || c.hitDone) continue
       const ts = t.body.state
       const dx = ts.pos.x - hx
       const dz = ts.pos.z - hz
