@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { useRoute } from 'vue-router'
 import { createArena } from '@/arena/engine'
+import { roomBySlug } from '@/arena/rooms'
 import { ABILITIES } from '@/arena/abilities'
 import { useArenaStore } from '@/stores/arena'
 
@@ -27,6 +28,7 @@ onMounted(async () => {
     if (!alive) return
     const created = await createArena(host.value, {
       test: testMode,
+      room: roomBySlug(route.query.room),
       loadout: loadout ?? undefined,
       onHud: (s) => (hud.value = s),
     })
@@ -97,7 +99,7 @@ const fmt = (n) => {
 
 <template>
   <section
-    class="relative h-[calc(100dvh-8.5rem)] min-h-[420px] overflow-hidden rounded-xl border border-cyan-900/60 bg-[#04060b] shadow-[0_0_40px_-12px_rgba(34,211,238,0.35)]"
+    class="relative h-[calc(100dvh-5.5rem)] min-h-[420px] overflow-hidden rounded-xl border border-cyan-900/60 bg-[#04060b] shadow-[0_0_40px_-12px_rgba(34,211,238,0.35)]"
   >
     <div ref="host" class="absolute inset-0" data-testid="arena-host"></div>
 
@@ -117,6 +119,10 @@ const fmt = (n) => {
 
     <template v-if="status === 'ready' && hud">
       <!-- Health bars, fighting-game style: you on the left, the dummy on the right. -->
+      <!-- A soft dark band behind the health bars: they stay readable on a bright arena. -->
+      <div
+        class="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/70 to-transparent"
+      ></div>
       <div class="pointer-events-none absolute inset-x-3 top-3 flex items-start gap-3 sm:gap-6">
         <div class="flex-1">
           <div class="mb-1 flex justify-between text-[11px] font-semibold tracking-widest">
@@ -258,20 +264,6 @@ const fmt = (n) => {
               <span v-else-if="a.lowMana" class="text-sky-300/80">mana</span>
             </div>
           </div>
-        </div>
-        <div
-          class="mx-auto max-w-max rounded-2xl border border-cyan-900/60 bg-black/50 px-4 py-1.5 text-center text-xs leading-5 text-slate-300 backdrop-blur-sm"
-        >
-          <span class="font-mono text-cyan-300">Click</span> to look around (Esc lets go) ·
-          <span class="font-mono text-cyan-300">WASD</span> move ·
-          <span class="font-mono text-cyan-300">Shift</span> sprint ·
-          <span class="font-mono text-cyan-300">Space</span> jump, again = double jump ·
-          <span class="font-mono text-cyan-300">C</span> dash ·
-          <span class="font-mono text-cyan-300">Left click</span> punch (×3 = jab, cross, uppercut)
-          · <span class="font-mono text-cyan-300">Right click</span> heavy ·
-          <span class="font-mono text-cyan-300">F</span> guard (hold) ·
-          <span class="font-mono text-cyan-300">Q</span> fire bolt ·
-          <span class="font-mono text-cyan-300">T</span> emote
         </div>
       </div>
     </template>

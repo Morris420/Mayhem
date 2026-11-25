@@ -77,7 +77,13 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
   - Arena: "Dungeon Gate", built from KayKit Dungeon Remastered (CC0): stone floor, two-storey walls, pillars, torches (warm lights), banners, rubble, a ledge staircase. Collisions still come from the room file.
 - **Feel pass, round 1 (25 Nov):** the hunter has his VRoid textures; outlines and the blue cast are gone and the dungeon is brightly lit (warm daylight + torches); the camera is a free third-person orbit (no auto-framing; it slides in along its line near walls instead of sticking); the dash is a committed roll with a hop (≈3.9 m, 0.6 s, nothing else until it ends); after a wall jump there are no more jumps until you land. Tests: 95 unit, 22 browser.
 - **Feel pass, round 2 (25 Nov):** the shirt/chest was see-through (the conversion had the texture V axis upside down; fixed in the texture script); hunters are 25% bigger (`SIZE` in player.js: body, reach, strides and the model all scale); the dash is now a forward flip (crouch, tuck and a full spin round the waist, land) built from the jump clips, until a better Mixamo roll arrives.
-- **Next: the arena preset (Morrison is sourcing one), then VFX (anime hit effects), then D (the boss).** The whole remaining plan is `docs/arena-build-guide.md` (milestones A-G and the production checklist). Start a new chat with `docs/next-session-prompt.md`; work on the `arena` branch.
+- **The Ruined Church + movement round 3 (25 Nov):** Screenshot: docs/screenshots/arena-church.png.
+  - New default arena: Hussein Yaseen's church scan (CC-BY), 230 MB -> 6.1 MB, scaled so the hunters stand big in it; fight area 38.75 x 18.6 m between two columns; dim (scan tinted down, haze, warm key + cool rim on the fighters). `?room=training-hall` still opens the dungeon.
+  - Crouch (hold X): crouch-walk at 2.4 m/s, eased down/up transitions from the Mixamo clips. Guard also on the wheel click. Heavy landings (falls over 13 m/s) slow you for 0.2 s and play a deeper landing; light hops just dip.
+  - Dash = Mixamo's Run To Rolling on the floor (no more floating), 0.9 s, ~4 m; double jump plays a normal jump.
+  - Animation: feet are pinned to the floor every frame (no more sinking or floating clips); blend times per state (strikes snap in, recoveries ease out).
+  - Layout: the arena fills the width; the controls strip is gone.
+- **Next: the arena preset (done: the church), then VFX (anime hit effects), then D (the boss).** The whole remaining plan is `docs/arena-build-guide.md` (milestones A-G and the production checklist). Start a new chat with `docs/next-session-prompt.md`; work on the `arena` branch.
 
 ## Arena: decisions waiting for you
 - Milestone C balance (my picks, all one-line changes in `ArenaRules`): fresh hunter = 80 health / 85% damage, maxed = 120 / 115%; Fire bolt unlocked from Intellect 1 so you can try it now.

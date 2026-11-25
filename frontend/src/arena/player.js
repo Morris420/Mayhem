@@ -18,8 +18,12 @@ export const SIZE = 1.25
 export const MOVE = {
   radius: 0.4 * SIZE, // body radius, metres
   halfHeight: 0.5 * SIZE, // total height = 2 * (halfHeight + radius) = 1.8 m * SIZE
-  walkSpeed: 5, // m/s at full stick
-  sprintSpeed: 8.5, // m/s with sprint held
+  walkSpeed: 5.5, // m/s at full stick (a bigger hunter covers more ground)
+  sprintSpeed: 9.5, // m/s with sprint held
+  crouchSpeed: 2.4, // m/s crouch-walking (no sprint while crouched)
+  hardLanding: 13, // m/s falling speed from which a landing is heavy...
+  landLag: 0.2, // ...and slows you for this long (s)...
+  landLagSpeed: 0.35, // ...to this share of your speed
   accel: 40, // m/s² on the ground; high = snappy, low = icy
   airAccel: 14, // m/s² in the air: you can steer a jump, but not turn on a dime
   gravity: 24, // m/s², heavier than real (9.8): games feel floaty otherwise
@@ -96,6 +100,8 @@ export function createPlayer(world, spawn) {
     lock: 0,
     lastWall: null, // the wall we may still kick off during wallGrace
     fromJump: false, // rising because of a jump (so letting go can cut it short)
+    crouching: false, // held crouch, on the ground
+    landLag: 0, // s of heavy-landing slowdown left
   }
 
   // One fixed step.
@@ -106,7 +112,7 @@ export function createPlayer(world, spawn) {
   //          movement (combat uses it to face the opponent while blocking)
   function update(
     dt,
-    { move, sprint = false, jumpHeld = false, jumpPressed = false, face = null },
+    { move, sprint = false, jumpHeld = false, jumpPressed = false, face = null, crouch = false },
   ) {
     let mx = move.x
     let mz = move.z
@@ -122,9 +128,12 @@ export function createPlayer(world, spawn) {
     s.buffer = jumpPressed ? MOVE.jumpBuffer : Math.max(0, s.buffer - dt)
     s.wallGrace = Math.max(0, s.wallGrace - dt)
     s.lock = Math.max(0, s.lock - dt)
+    s.landLag = Math.max(0, s.landLag - dt)
+    s.crouching = crouch && s.grounded
 
     // --- horizontal: accelerate towards the wish ---
-    const top = sprint ? MOVE.sprintSpeed : MOVE.walkSpeed
+    let top = s.crouching ? MOVE.crouchSpeed : sprint ? MOVE.sprintSpeed : MOVE.walkSpeed
+    if (s.landLag > 0) top *= MOVE.landLagSpeed
     if (s.lock === 0) {
       const a = (s.grounded ? MOVE.accel : MOVE.airAccel) * dt
       s.vel.x = approach(s.vel.x, mx * top, a)
@@ -203,12 +212,15 @@ export function createPlayer(world, spawn) {
     const bx = s.pos.x
     const by = s.pos.y
     const bz = s.pos.z
+    const fallSpeed = -s.vel.y
     const hit = moveBody(world, s.pos, s.vel.x * dt, s.vel.y * dt, s.vel.z * dt, SHAPE, {
       stepHeight: MOVE.stepHeight,
       snap: MOVE.snapDown,
       wasGrounded,
     })
     s.grounded = hit.grounded
+    // A heavy landing: you feel it for a moment.
+    if (s.grounded && !wasGrounded && fallSpeed >= MOVE.hardLanding) s.landLag = MOVE.landLag
     const m = s.moved
     m.x = s.pos.x - bx
     m.y = s.pos.y - by
@@ -237,7 +249,7 @@ export function createPlayer(world, spawn) {
     if (hit.ceiling && s.vel.y > 0) s.vel.y = 0
 
     const speed2 = (m.x * m.x + m.z * m.z) / (dt * dt)
-    s.sprinting = sprint && s.grounded && speed2 > SPRINT_MIN2
+    s.sprinting = sprint && !s.crouching && s.grounded && speed2 > SPRINT_MIN2
 
     // Face where we are going; when hugging a wall, face the wall.
     if (face) turnTowards(s.facing, face.x, face.z)
@@ -261,7 +273,8 @@ export function createPlayer(world, spawn) {
     s.grounded = false
     s.wall = null
     s.lastWall = null
-    s.coyote = s.buffer = s.wallGrace = s.lock = 0
+    s.coyote = s.buffer = s.wallGrace = s.lock = s.landLag = 0
+    s.crouching = false
     s.fromJump = false
     s.airJumpUsed = false
     s.wallJumpUsed = false

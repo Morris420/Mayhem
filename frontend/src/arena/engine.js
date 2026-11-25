@@ -15,7 +15,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 
-import defaultRoom from './rooms/training-hall.js'
+import { DEFAULT_ROOM as defaultRoom } from './rooms/index.js'
 import { buildRoomScene, loadRoomDressing } from './world.js'
 import { createSimulation } from './sim.js'
 import {
@@ -365,6 +365,7 @@ export async function createArena(
           x: 0,
           y: 0,
           sprint: false,
+          crouch: false,
           jump: false,
           light: false,
           heavy: false,

@@ -171,6 +171,10 @@ export const CLIPS = {
   jump: 'JumpStanding',
   fallLand: 'FallLand',
   roll: 'Roll',
+  jump2: 'Jump', // the double jump
+  crouchIdle: 'CrouchIdle',
+  crouchWalk: 'CrouchWalk', // Mixamo's crouch walk *back*, played backwards
+  standUp: 'StandUp', // crouch -> stand; backwards = crouching down
   hitHead: 'HitHead',
   hitBody: 'HitBody',
   emote: 'Emote',
@@ -221,19 +225,12 @@ function attackProgress(m, frame, impact) {
 const CAST_CLIP = 'Straight'
 const CAST_IMPACT = 0.39
 
-// The dash flip, as fractions of the dash: when the tuck starts, when the spin is
-// complete and the landing starts.
-export const ROLL = { tuckFrom: 0.1, landFrom: 0.72 }
+// The dash: Mixamo's Run To Rolling, from the dive to back on his feet (seconds
+// into the clip), stretched over the whole dash.
+export const ROLL = { from: 0.42, to: 1.85, duration: 2.43 }
+// Crouch_To_Stand: seconds into the clip where he is fully down / fully up.
+export const CROUCH = { down: 0.7, up: 2.25, duration: 3.33, in: 0.22, out: 0.3, stride: 1.1 }
 const dashProgress = (p) => clamp01((COMBAT.dashFrames - p.timer) / COMBAT.dashFrames)
-const smooth = (x) => x * x * (3 - 2 * x)
-// How far round the flip is, in radians (0 outside a dash).
-export function rollSpin(p) {
-  if (p.combat !== 'dash') return 0
-  const q = dashProgress(p)
-  return (
-    2 * Math.PI * smooth(clamp01((q - ROLL.tuckFrom * 0.5) / (ROLL.landFrom - ROLL.tuckFrom * 0.5)))
-  )
-}
 
 export function overrideClip(p, ctx = {}) {
   switch (p.combat) {
@@ -266,26 +263,37 @@ export function overrideClip(p, ctx = {}) {
       return [CLIPS.hitHead, clamp01((COMBAT.knockdownFrames - p.timer) / 30)]
     case 'getup':
       return [CLIPS.fallLand, 0.7 + 0.3 * clamp01(1 - p.timer / COMBAT.getupFrames)]
-    case 'dash': {
-      // A forward flip: crouch, tuck (the body spins, see rollSpin), land. Built
-      // from the jump clips because Mixamo's ground roll sinks into the floor.
-      const q = dashProgress(p)
-      if (q < ROLL.tuckFrom) return [CLIPS.jump, 0.25 + 0.15 * (q / ROLL.tuckFrom)]
-      if (q < ROLL.landFrom) return [CLIPS.jump, 0.4]
-      return [CLIPS.fallLand, 0.35 + 0.5 * clamp01((q - ROLL.landFrom) / (1 - ROLL.landFrom))]
-    }
+    case 'dash':
+      return [CLIPS.roll, (ROLL.from + (ROLL.to - ROLL.from) * dashProgress(p)) / ROLL.duration]
     case 'emote':
       return [CLIPS.emote, 'loop']
   }
+  // Crouching: down (StandUp backwards), then the crouch idle or walk; back up
+  // the same way. ctx.crouch = { t: 0 standing .. 1 down, phase, moving }.
+  const cr = ctx.crouch
+  if (cr && cr.t > 0 && p.grounded && p.combat === 'free') {
+    if (cr.t < 1)
+      return [CLIPS.standUp, (CROUCH.up + (CROUCH.down - CROUCH.up) * cr.t) / CROUCH.duration]
+    if (cr.moving) return [CLIPS.crouchWalk, 1 - cr.phase]
+    return [CLIPS.crouchIdle, 'loop']
+  }
   if (p.wall) return [CLIPS.jump, 0.62]
   if (!p.grounded) {
-    // Double jump: a quick tumble.
-    if (ctx.sinceDouble < 0.4) return [CLIPS.roll, 0.42 + 0.3 * (ctx.sinceDouble / 0.4)]
-    // Rising: tuck up towards the top of the jump; falling: reach for the floor.
+    // Double jump: a second, springier jump (the running jump's take-off and tuck).
+    if (ctx.sinceDouble < 0.45) return [CLIPS.jump2, 0.3 + 0.25 * (ctx.sinceDouble / 0.45)]
+    // Rising: tuck up towards the top of the jump.
     if (p.vel.y > 0) return [CLIPS.jump, 0.28 + 0.2 * clamp01(1 - p.vel.y / 9)]
-    return [CLIPS.jump, 0.48 + 0.2 * clamp01(-p.vel.y / 10)]
+    // Falling: a short drop keeps the jump's pose; a long one opens up into the
+    // falling pose (arms up), ready for the landing.
+    if (p.vel.y > -7) return [CLIPS.jump, 0.48 + 0.2 * clamp01(-p.vel.y / 7)]
+    return [CLIPS.fallLand, 0.05 + 0.12 * clamp01((-p.vel.y - 7) / 8)]
   }
-  if (ctx.landing > 0) return [CLIPS.fallLand, 0.75 + 0.25 * clamp01(1 - ctx.landing / 0.25)]
+  // Landing: a crouch that soaks the fall; the harder the fall, the deeper and
+  // longer (landing = { left, length } in seconds).
+  if (ctx.landing?.left > 0) {
+    const k = 1 - ctx.landing.left / ctx.landing.length
+    return [CLIPS.fallLand, ctx.landing.from + (0.95 - ctx.landing.from) * k]
+  }
   return null
 }
 
@@ -343,12 +351,7 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
   const root = new THREE.Group()
   root.name = 'fighter'
   const body = new THREE.Group() // turns with the fighter
-  // The flip pivots round the waist, not the feet.
-  const spin = new THREE.Group()
-  spin.position.y = FOOT_OFFSET
-  model.position.y -= FOOT_OFFSET
-  spin.add(model)
-  body.add(spin)
+  body.add(model)
   root.add(body)
   const shadow = createShadow(edge)
   root.add(shadow.mesh)
@@ -364,6 +367,33 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
     actions[clip.name] = a
   }
   const has = (n) => !!actions[n]
+  // Bones that may touch the floor, each with how far its joint sits above the
+  // surface it rests on (calibrated below from the idle pose for the feet).
+  const contacts = []
+  const tmp = new THREE.Vector3()
+  {
+    const bone = (n) => model.getObjectByName(n)
+    const feet = ['J_Bip_L_ToeBase', 'J_Bip_R_ToeBase', 'J_Bip_L_Foot', 'J_Bip_R_Foot'].map(bone)
+    if (feet.every(Boolean) && actions[CLIPS.idle]) {
+      actions[CLIPS.idle].setEffectiveWeight(1)
+      actions[CLIPS.idle].time = 0
+      mixer.update(0)
+      model.updateMatrixWorld(true)
+      const h = feet.map((b) => b.getWorldPosition(tmp).y)
+      // Toes and ankles rest at their idle heights above the floor.
+      feet.forEach((b, i) => contacts.push([b, h[i]]))
+      actions[CLIPS.idle].setEffectiveWeight(0)
+      for (const [n, sole] of [
+        ['J_Bip_L_Hand', 0.05],
+        ['J_Bip_R_Hand', 0.05],
+        ['J_Bip_C_Head', 0.12],
+        ['J_Bip_C_Hips', 0.12],
+      ]) {
+        const b = bone(n)
+        if (b) contacts.push([b, sole * SIZE])
+      }
+    }
+  }
   const dur = (n) => actions[n].getClip().duration
   const ovr = {} // override clip name -> current weight (for cross-fades)
   let locoPhase = 0
@@ -372,10 +402,14 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
   let lastOverride = null
   let wasGrounded = true
   let airTime = 0
-  let landing = 0
+  // The landing being played: { left, length, from } (seconds; clip fraction).
+  const landing = { left: 0, length: 0, from: 0 }
+  let fallSpeed = 0
   let lastJumps = 0
   let sinceDouble = Infinity
   let nearW = 0 // fight stance weight (eased)
+  const crouch = { t: 0, phase: 0, moving: false }
+  let groundOffset = 0 // keeps the lowest foot (or hand, in a roll) on the floor
   let yawOverride = null
   let shown = null
 
@@ -383,10 +417,20 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
   // ctx.near = an opponent is close (switches to the fight stance).
   function update(p, dt, ctx = {}) {
     if (dt <= 0) return
-    if (p.grounded && !wasGrounded && airTime > 0.25) landing = 0.25
+    const speed = Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z)
+    if (p.grounded && !wasGrounded && airTime > 0.2 && p.combat === 'free') {
+      // From a hop: a quick dip. From a big fall: FallLand's full crouch.
+      const hard = clamp01((fallSpeed - 6) / 10)
+      landing.length = 0.16 + 0.22 * hard
+      landing.left = landing.length
+      landing.from = 0.62 - 0.3 * hard
+    }
+    if (!p.grounded) fallSpeed = Math.max(0, -p.vel.y)
     airTime = p.grounded ? 0 : airTime + dt
     wasGrounded = p.grounded
-    landing = Math.max(0, landing - dt)
+    landing.left = Math.max(0, landing.left - dt)
+    // Moving off straight away cuts the landing short (walking out of it).
+    if (speed > 3) landing.left = Math.min(landing.left, 0.06)
     if (p.jumps !== lastJumps) {
       if (p.lastJump === 'double') sinceDouble = 0
       lastJumps = p.jumps
@@ -396,20 +440,36 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
 
     const frozen = p.hitstop > 0
     const step = frozen ? 0 : dt
-    const speed = Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z)
 
     // Rolling: the body turns to roll the way the dash goes (render only).
     // Kept through the landing, when the roll has braked to a near stop.
     if (p.combat !== 'dash') yawOverride = null
     else if (speed > 0.5) yawOverride = Math.atan2(p.vel.x, p.vel.z)
-    spin.rotation.x = rollSpin(p)
+
+    // Crouch: eased down and up, so the transition plays rather than snaps.
+    const wantDown = p.crouching && p.combat === 'free'
+    crouch.t = wantDown
+      ? Math.min(1, crouch.t + dt / CROUCH.in)
+      : Math.max(0, crouch.t - dt / CROUCH.out)
+    crouch.moving = speed > 0.4
+    if (has(CLIPS.crouchWalk))
+      crouch.phase = (crouch.phase + (speed / CROUCH.stride / dur(CLIPS.crouchWalk)) * step) % 1
 
     // Override (attack, block, hit, dash, air...) fades in quickly.
-    const o = overrideClip(p, { landing, sinceDouble, near: ctx.near })
+    const o = overrideClip(p, { landing, sinceDouble, near: ctx.near, crouch })
     const target = o && has(o[0]) ? o[0] : null
     if (target !== lastOverride) loopTime = 0
     lastOverride = target
-    const fade = Math.min(1, dt / 0.07)
+    // Blend times: strikes snap in (they must read on their frame), everything
+    // else eases; going back to walking/standing eases out the slowest.
+    const fadeTime = !target
+      ? 0.16
+      : p.combat === 'attack' || p.combat === 'cast'
+        ? 0.05
+        : p.combat === 'hitstun' || p.combat === 'blockstun'
+          ? 0.04
+          : 0.1
+    const fade = Math.min(1, dt / fadeTime)
     for (const n of new Set([...Object.keys(ovr), ...(target ? [target] : [])])) {
       ovr[n] = (ovr[n] ?? 0) + ((n === target ? 1 : 0) - (ovr[n] ?? 0)) * fade
       if (ovr[n] < 0.001 && n !== target) delete ovr[n]
@@ -450,6 +510,25 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
       a.setEffectiveWeight(a.getEffectiveWeight() + ovr[n])
     }
     mixer.update(0) // apply the times and weights we just set
+
+    // Feet on the floor: Mixamo clips don't all agree on how high the hips are,
+    // so on the ground the body is shifted until its lowest point (a foot; a hand
+    // or the head mid-roll) touches the floor. Eased, so it never pops.
+    let want = 0
+    if (p.grounded && p.combat !== 'down' && p.combat !== 'ko') {
+      model.updateMatrixWorld(true)
+      body.updateMatrixWorld(true)
+      let low = Infinity
+      for (const [bone, sole] of contacts) {
+        bone.getWorldPosition(tmp)
+        low = Math.min(low, tmp.y - sole)
+      }
+      // Relative to the body's own feet line (root y), minus the current fix.
+      want = groundOffset - (low - root.getWorldPosition(tmp).y)
+      want = Math.max(-0.6, Math.min(0.6, want))
+    }
+    groundOffset += (want - groundOffset) * Math.min(1, dt * 18)
+    body.position.y = groundOffset
     shown =
       target && ovrSum > 0.5
         ? target

@@ -4,6 +4,7 @@
 // exactly what you collide with.
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { roomBoxes } from './physics.js'
 
@@ -233,6 +234,19 @@ export function buildRoomScene(room) {
 export async function loadRoomDressing(room) {
   const group = new THREE.Group()
   group.name = 'dressing'
+  if (room.model) {
+    // One whole scene (a scan): drawn as it is, unlit (its light is baked in).
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+    const gltf = await loader.loadAsync(room.model)
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return
+      o.name = 'room-model'
+      // The floor is seen at a grazing angle: anisotropic filtering keeps it sharp.
+      if (o.material.map) o.material.map.anisotropy = 8
+      if (room.modelTint) o.material.color.set(room.modelTint) // darker than the scan's daylight
+    })
+    group.add(gltf.scene)
+  }
   if (!room.kit || !room.dressing?.length) return group
   const gltf = await new GLTFLoader().loadAsync(room.kit)
   const byPiece = {}

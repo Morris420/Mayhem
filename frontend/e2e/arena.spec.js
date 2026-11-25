@@ -26,8 +26,10 @@ test.afterEach(async ({ page }, info) => {
   expect(info.problems, 'console errors / failed requests').toEqual([])
 })
 
-async function openArena(page) {
-  await page.goto('/arena?test=1')
+// Most tests run in the Dungeon Gate: they need its staircase and walls. The
+// Ruined Church (the default) has its own test.
+async function openArena(page, room = 'training-hall') {
+  await page.goto(`/arena?test=1&room=${room}`)
   await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 60_000 })
   // The dummy wanders by default; most tests want it standing still.
   await page.evaluate(() => window.__arena.dummy('idle'))
@@ -55,6 +57,24 @@ test('the arena loads and actually draws the lit dungeon', async ({ page }) => {
   expect(dbg.drawCalls).toBeLessThan(120)
 })
 
+test('the Ruined Church: the default arena loads, and its walls hold', async ({ page }) => {
+  await page.goto('/arena?test=1')
+  await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 90_000 })
+  await page.evaluate(() => window.__arena.dummy('idle'))
+  const dbg = await page.evaluate(() => window.__arena.debug())
+  expect(dbg.figure).toBe('hunter')
+  expect(dbg.drawCalls).toBeLessThan(120)
+  const px = await page.evaluate(() => window.__arena.pixels())
+  expect(px.lit).toBeGreaterThan(0.5)
+  await step(page, 1200)
+  await page.screenshot({ path: `${SHOTS}arena-church.png` })
+  // The aisle wall on the left (x = -19.4) stops you.
+  await input(page, { x: -1, y: 0 })
+  const s = await step(page, 6000)
+  expect(s.player.pos.x).toBeGreaterThan(-19.4)
+  expect(s.player.pos.x).toBeLessThan(-18.5)
+})
+
 test('the capsule falls, walks and collides — through the test hook', async ({ page }) => {
   await openArena(page)
 
@@ -70,12 +90,12 @@ test('the capsule falls, walks and collides — through the test hook', async ({
   expect(s.player.pos.y).toBeLessThan(spawnY - 1)
   expect(s.player.pos.y).toBeGreaterThan(0.85) // capsule centre, feet on the floor
 
-  // Walks forward (-z) about 4.7 m in a second.
+  // Walks forward (-z) about 5.2 m in a second (5.5 m/s after speeding up).
   const z0 = s.player.pos.z
   await input(page, { x: 0, y: 1 })
   s = await step(page, 1000)
-  expect(z0 - s.player.pos.z).toBeGreaterThan(4.4)
-  expect(z0 - s.player.pos.z).toBeLessThan(5.01)
+  expect(z0 - s.player.pos.z).toBeGreaterThan(4.9)
+  expect(z0 - s.player.pos.z).toBeLessThan(5.51)
 
   // Holds left for six seconds: stops at the wall (inner face x = -22, radius 0.5).
   await input(page, { x: -1, y: 0 })

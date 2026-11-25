@@ -130,8 +130,10 @@ function startDash(f, ctl) {
   }
   s.vel.x = dx * COMBAT.dashSpeed
   s.vel.z = dz * COMBAT.dashSpeed
-  s.vel.y = COMBAT.dashHop
-  s.grounded = false
+  if (COMBAT.dashHop > 0) {
+    s.vel.y = COMBAT.dashHop
+    s.grounded = false
+  }
   s.lock = COMBAT.dashMoveFrames / 60
   c.state = 'dash'
   c.timer = COMBAT.dashFrames
@@ -328,18 +330,20 @@ export function stepFighter(f, ctl, fighters, dt) {
   let jump = false
   let jumpPressed = false
   let sprint = false
+  let crouch = false
   if (c.state === 'free') {
     move = { x: ctl.mx, z: ctl.mz }
     face = null
     jump = ctl.jump
     jumpPressed = ctl.jumpPressed
     sprint = ctl.sprint
+    crouch = !!ctl.crouch
   } else if (c.state === 'block') {
     if (opp && opp.d < COMBAT.blockFaceRange && opp.d > 1e-6) face = { x: opp.x, z: opp.z }
   } else if (c.state === 'attack' && MOVES[c.move].air) {
     move = { x: ctl.mx, z: ctl.mz } // keep steering a jump attack
   }
-  f.body.update(dt, { move, sprint, jumpHeld: jump, jumpPressed, face })
+  f.body.update(dt, { move, sprint, jumpHeld: jump, jumpPressed, face, crouch })
   return release
 }
 

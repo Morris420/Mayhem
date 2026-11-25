@@ -1,5 +1,6 @@
 <script setup>
-import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { computed } from 'vue'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import ToastStack from '@/components/ToastStack.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -13,6 +14,9 @@ import { useArenaStore } from '@/stores/arena'
 const auth = useAuthStore()
 const game = useGameStore()
 const router = useRouter()
+const route = useRoute()
+// The arena uses (almost) the whole width; every other page keeps the column.
+const wide = computed(() => route.name === 'arena')
 
 const links = [
   { name: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -39,7 +43,9 @@ async function logout() {
 <template>
   <div class="min-h-screen bg-[#0b0e14] text-slate-100">
     <header class="sticky top-0 z-20 border-b border-slate-800 bg-[#0b0e14]/90 backdrop-blur">
-      <nav class="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-6">
+      <nav
+        class="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-6"
+      >
         <div class="flex min-w-0 items-center gap-0.5 sm:gap-1">
           <span class="mr-1 text-base font-bold tracking-wide text-white sm:mr-4">Mayhem</span>
           <RouterLink
@@ -58,14 +64,21 @@ async function logout() {
 
         <div class="flex items-center gap-3 text-sm">
           <span class="hidden text-slate-400 lg:inline">{{ auth.user?.username }}</span>
-          <button type="button" class="flex items-center gap-2 whitespace-nowrap rounded-lg border border-slate-700 px-2 py-1.5 text-slate-300 transition-colors sm:px-3 hover:border-slate-500 hover:text-white" @click="logout">
+          <button
+            type="button"
+            class="flex items-center gap-2 whitespace-nowrap rounded-lg border border-slate-700 px-2 py-1.5 text-slate-300 transition-colors sm:px-3 hover:border-slate-500 hover:text-white"
+            @click="logout"
+          >
             <AppIcon name="log-out" class="h-4 w-4" /> <span class="hidden sm:inline">Log out</span>
           </button>
         </div>
       </nav>
     </header>
 
-    <main class="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
+    <main
+      class="mx-auto space-y-5"
+      :class="wide ? 'max-w-none px-2 py-2 sm:px-3' : 'max-w-6xl px-4 py-6 sm:px-6'"
+    >
       <RouterView />
     </main>
 

@@ -281,14 +281,14 @@ describe('guard meter', () => {
 })
 
 describe('dash', () => {
-  it('dashes about two metres in the stick direction', () => {
+  it('rolls about four metres in the stick direction', () => {
     const sim = face(6)
     const x0 = sim.state().player.pos.x
     sim.setInput({ x: 1 })
     sim.press('dash')
     sim.step()
     sim.setInput({ x: 0 })
-    run(sim, 400)
+    run(sim, 1100)
     const moved = sim.state().player.pos.x - x0
     expect(moved).toBeGreaterThan(3) // a full roll
     expect(moved).toBeLessThan(4.5)
@@ -299,7 +299,7 @@ describe('dash', () => {
     const z0 = sim.state().player.pos.z
     const facing = sim.state().player.facing
     sim.press('dash')
-    run(sim, 400)
+    run(sim, 1100)
     expect(sim.state().player.pos.z - z0).toBeGreaterThan(2.5) // facing -z, so back is +z
     expect(sim.state().player.facing).toEqual(facing)
   })
@@ -321,12 +321,12 @@ describe('dash', () => {
     for (let i = 0; i < n; i++) sim.step()
   }
 
-  it('is a committed roll: a hop, and no other input until it is over', () => {
+  it('is a committed roll: on the floor, and no other input until it is over', () => {
     const sim = face(6)
     sim.setInput({ x: 1 })
     sim.press('dash')
     sim.step()
-    expect(sim.state().player.vel.y).toBeGreaterThan(0) // the hop
+    expect(sim.state().player.grounded).toBe(true) // the animation dives; the body stays down
     sim.press('light') // ignored mid-roll
     sim.press('jump')
     steps(sim, 4)

@@ -93,6 +93,7 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
     x: 0,
     y: 0,
     sprint: false,
+    crouch: false, // held
     jump: false,
     light: false,
     heavy: false,
@@ -124,6 +125,7 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
       mx: move.x,
       mz: move.z,
       sprint: input.sprint,
+      crouch: input.crouch,
       jump: input.jump || pressHolding,
       jumpPressed: pressed.jump,
       lightPressed: pressed.light,
@@ -173,6 +175,7 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
     if ('x' in next) input.x = clampAxis(next.x)
     if ('y' in next) input.y = clampAxis(next.y)
     if ('sprint' in next) input.sprint = !!next.sprint
+    if ('crouch' in next) input.crouch = !!next.crouch
     for (const b of BUTTONS) if (b in next) input[b] = !!next[b]
   }
 
@@ -193,6 +196,8 @@ export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dumm
       vel: { ...p.vel },
       grounded: p.grounded,
       sprinting: p.sprinting,
+      crouching: p.crouching,
+      landLag: p.landLag,
       wall: p.wall ? { ...p.wall } : null,
       jumps: p.jumps,
       lastJump: p.lastJump,

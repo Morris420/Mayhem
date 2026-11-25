@@ -557,3 +557,47 @@ describe('fixed-step clock', () => {
     expect(stepsFor(9)).toBe(1)
   })
 })
+
+describe('crouch and heavy landings', () => {
+  it('crouching (held) slows you to a crouch-walk, and no sprint', () => {
+    const sim = createSimulation(room)
+    sim.teleport(onFloor(0, 0))
+    run(sim, 300)
+    sim.setInput({ y: 1, crouch: true, sprint: true })
+    run(sim, 1000)
+    const p = sim.state().player
+    expect(p.crouching).toBe(true)
+    expect(p.sprinting).toBe(false)
+    expect(Math.abs(p.vel.z)).toBeCloseTo(MOVE.crouchSpeed, 5)
+    sim.setInput({ crouch: false })
+    run(sim, 500)
+    expect(sim.state().player.crouching).toBe(false)
+    sim.dispose()
+  })
+
+  it('a big fall lands heavy: a moment of slowdown, then full speed', () => {
+    const sim = createSimulation(room)
+    sim.teleport({ x: 0, y: 5.5, z: 0 }) // feet 4.4 m up, head under the lid
+    sim.setInput({ y: 1 })
+    let n = 0
+    while (!sim.state().player.grounded && n++ < 400) sim.step()
+    sim.step()
+    expect(sim.state().player.landLag).toBeGreaterThan(0)
+    run(sim, 600)
+    expect(sim.state().player.landLag).toBe(0)
+    expect(Math.abs(sim.state().player.vel.z)).toBeCloseTo(MOVE.walkSpeed, 5)
+    sim.dispose()
+  })
+
+  it('a hop lands light: no slowdown', () => {
+    const sim = createSimulation(room)
+    sim.teleport(onFloor(0, 0))
+    run(sim, 300)
+    sim.press('jump')
+    let n = 0
+    sim.step()
+    while (!sim.state().player.grounded && n++ < 400) sim.step()
+    expect(sim.state().player.landLag).toBe(0)
+    sim.dispose()
+  })
+})
