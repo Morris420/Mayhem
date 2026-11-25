@@ -16,7 +16,7 @@ Every asset in the repo gets a line here: source, licence, what we changed. No e
 | `Idle` | Breathing Idle (0–4.5 s) | standing alone |
 | `FightIdle` | Bouncing Fight Idle | standing with someone within 6 m, guarding |
 | `Walk`, `Run` | Walking, Running | locomotion, blended by speed (stride 1.75 / 4.6 m/s) |
-| `Jump`, `JumpStanding` | Running Jump, Standing Jump | jumps, double-jump tumble |
+| `Jump`, `JumpStanding` | Jump, Standing Jump | double jump; jumps and falls |
 | `FallLand` | Falling To Landing | falling, landing |
 | `HitHead`, `HitBody` | Big Hit To Head, Stomach Hit | hitstun, knockdown |
 | `Jab`, `Straight`, `Uppercut`, `Cross`, `BodyBlow` | cut from one Uppercut Jab flurry | light combo (jab → straight → uppercut), heavy, launcher |
