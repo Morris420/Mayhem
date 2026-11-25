@@ -13,6 +13,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { FOOT_OFFSET, MOVE } from './player.js'
 import { COMBAT, MOVES } from './moves.js'
+import { ABILITIES } from './abilities.js'
 
 export const HUNTER_URL = '/models/arena/hunter.glb'
 
@@ -191,6 +192,17 @@ export function overrideClip(p, landing) {
     case 'attack': {
       const m = MOVES[p.move]
       return [MOVE_CLIPS[p.move], attackProgress(m, p.moveFrame)]
+    }
+    case 'cast': {
+      // Scrubbed like an attack: the hand thrusts out exactly when the bolt leaves.
+      const ab = ABILITIES[p.slots?.[p.cast]]
+      if (!ab) return null
+      const f = p.castFrame
+      const t =
+        f <= ab.startup
+          ? 0.45 * (f / ab.startup)
+          : 0.45 + 0.55 * clamp01((f - ab.startup) / ab.recovery)
+      return ['Spellcast_Shoot', t]
     }
     case 'block':
       return ['Blocking', 'loop']

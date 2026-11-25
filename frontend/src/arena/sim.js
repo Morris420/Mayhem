@@ -8,7 +8,15 @@
 // state, on every machine: that is what online rollback play is built on
 // (arena-design.md §0), and snapshot()/restore() are its save and load.
 import { createCollisionWorld } from './physics.js'
-import { createFighter, resolveHits, separate, stepFighter } from './combat.js'
+import {
+  canBeHit,
+  createFighter,
+  projectileHit,
+  resolveHits,
+  separate,
+  stepFighter,
+} from './combat.js'
+import { spawnProjectile, stepProjectiles } from './abilities.js'
 import { createBrain, think } from './ai.js'
 import { STEP_S } from './loop.js'
 
@@ -40,18 +48,27 @@ export function stickToWorld(stick, view = { x: 0, z: -1 }) {
   }
 }
 
-const BUTTONS = ['jump', 'light', 'heavy', 'block', 'dash']
+const BUTTONS = ['jump', 'light', 'heavy', 'block', 'dash', 'ability1', 'ability2', 'ability3']
+const TAPS = ['jump', 'light', 'heavy', 'dash', 'ability1', 'ability2', 'ability3']
 const clone = (o) => JSON.parse(JSON.stringify(o))
 
 // options.dummy: 'auto' | 'idle' | 'block' | 'attack' | 'none' (no dummy at all)
-export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
+// options.loadout: the player's stat block from the server (GET /api/arena/loadout).
+//   An input to the simulation, like the controls: it is never computed here.
+// options.dummyLoadout: the same for the dummy (default: the base numbers).
+export function createSimulation(room, { seed = 1, dummy = 'none', loadout, dummyLoadout } = {}) {
   const world = createCollisionWorld(room)
   const fighters = [
-    createFighter(world, { id: 'player', spawn: room.spawn, facing: { x: 0, z: -1 } }),
+    createFighter(world, { id: 'player', spawn: room.spawn, facing: { x: 0, z: -1 }, loadout }),
   ]
   if (dummy !== 'none' && room.dummySpawn) {
     fighters.push(
-      createFighter(world, { id: 'dummy', spawn: room.dummySpawn, facing: { x: 0, z: 1 } }),
+      createFighter(world, {
+        id: 'dummy',
+        spawn: room.dummySpawn,
+        facing: { x: 0, z: 1 },
+        loadout: dummyLoadout,
+      }),
     )
   }
   const [hero] = fighters
@@ -71,16 +88,21 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
     heavy: false,
     block: false,
     dash: false,
+    ability1: false,
+    ability2: false,
+    ability3: false,
     view: { x: 0, z: -1 }, // the camera direction the stick is relative to
   }
-  const wasHeld = { jump: false, light: false, heavy: false, dash: false }
-  const queued = { jump: false, light: false, heavy: false, dash: false } // press() taps
+  const wasHeld = Object.fromEntries(TAPS.map((b) => [b, false]))
+  const queued = Object.fromEntries(TAPS.map((b) => [b, false])) // press() taps
   let pressHolding = false // a press('jump') counts as held until the jump peaks
   let events = []
+  let projectiles = [] // fire bolts in flight (abilities.js), in spawn order
+  let nextProjectile = 1
 
   function heroControls() {
     const pressed = {}
-    for (const b of ['jump', 'light', 'heavy', 'dash']) {
+    for (const b of TAPS) {
       pressed[b] = (input[b] && !wasHeld[b]) || queued[b]
       wasHeld[b] = input[b]
     }
@@ -97,6 +119,7 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
       heavyPressed: pressed.heavy,
       block: input.block,
       dashPressed: pressed.dash,
+      abilityPressed: pressed.ability1 ? 1 : pressed.ability2 ? 2 : pressed.ability3 ? 3 : 0,
     }
   }
 
@@ -105,11 +128,18 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
     const controls = fighters.map((f) =>
       f === hero ? heroControls() : think(brain, f, hero, random),
     )
-    fighters.forEach((f, i) => stepFighter(f, controls[i], fighters, STEP_S))
+    fighters.forEach((f, i) => {
+      // A spell leaving the hand this step becomes a projectile (flies from next step).
+      if (stepFighter(f, controls[i], fighters, STEP_S))
+        projectiles.push(spawnProjectile(f, nextProjectile++))
+    })
     if (pressHolding && hero.body.state.vel.y <= 0 && !hero.body.state.fromJump)
       pressHolding = false
     separate(world, fighters)
     events = resolveHits(fighters)
+    const flown = stepProjectiles(projectiles, world, fighters, canBeHit, projectileHit, STEP_S)
+    projectiles = flown.projectiles
+    events.push(...flown.events)
     for (const e of events) e.tick = tick
     tick++
   }
@@ -134,7 +164,8 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
     for (const b of BUTTONS) if (b in next) input[b] = !!next[b]
   }
 
-  // A tap of one button on the next step: 'jump' | 'light' | 'heavy' | 'dash'.
+  // A tap of one button on the next step: 'jump' | 'light' | 'heavy' | 'dash' |
+  // 'ability1' | 'ability2' | 'ability3'.
   // A tapped jump is a full jump (held until it peaks); for a short hop, hold
   // jump via setInput and release it early instead.
   function press(button) {
@@ -169,6 +200,15 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
       guardMax: c.guardMax,
       invuln: c.invuln,
       juggle: c.juggle,
+      mana: c.mana,
+      manaMax: c.manaMax,
+      damage: c.damage,
+      power: c.power,
+      slots: [...c.slots],
+      cooldowns: [...c.cooldowns],
+      cast: c.cast,
+      castFrame: c.castFrame,
+      castCount: c.castCount,
     }
   }
 
@@ -182,6 +222,7 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
       input: { ...input },
       player: fighterState(hero),
       dummy: fighters[1] ? { ...fighterState(fighters[1]), mode: brain.mode } : null,
+      projectiles: projectiles.map((p) => ({ ...p })),
       events: events.map((e) => ({ ...e })),
     }
   }
@@ -197,6 +238,8 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
       queued,
       pressHolding,
       brain,
+      projectiles,
+      nextProjectile,
       fighters: fighters.map((f) => ({ body: f.body.state, c: f.c })),
     })
   }
@@ -212,6 +255,8 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
     Object.assign(queued, s.queued)
     pressHolding = s.pressHolding
     Object.assign(brain, s.brain)
+    projectiles = s.projectiles
+    nextProjectile = s.nextProjectile
     s.fighters.forEach((saved, i) => {
       Object.assign(fighters[i].body.state, saved.body)
       Object.assign(fighters[i].c, saved.c)

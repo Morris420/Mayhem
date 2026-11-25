@@ -24,11 +24,14 @@ Written 25 Nov 2026, at the end of the session that built the fighter kit.
 | Placeholder hunter (KayKit CC0) with speed-blended locomotion and scrubbed attack clips | `figure.js` |
 | Shield sphere (shrinks with the guard), hit sparks, camera shake, HUD bars + combo | `shield.js`, `effects.js`, `ArenaView.vue` |
 | `snapshot()` / `restore()` — whole-fight rewind, the base for rollback | `sim.js` |
-| Tests: 75 unit (sim, combat, AI, determinism), 19 browser | `src/arena/__tests__/`, `frontend/e2e/` |
+| **C:** stats from skills (`GET /api/arena/loadout`, `ArenaRules`, `Loadout`), fed into the sim as fighter options | `backend/app/Support/Arena/`, `stores/arena.js`, `combat.js` |
+| **C:** abilities: mana, cooldowns, casting (interruptible), projectiles in the sim and in `snapshot()`; Fire bolt on Q | `abilities.js`, `bolts.js` (look) |
+| **C:** HUD: stat card, mana bar, ability bar with cooldowns | `ArenaView.vue` |
+| Tests: 90 unit (sim, combat, abilities, AI, determinism), 22 browser, backend 7 arena tests | `src/arena/__tests__/`, `frontend/e2e/`, `backend/tests/` |
 
 Controls today: click the arena to capture the mouse (Esc releases) · mouse look, wheel zoom ·
 WASD move · Shift sprint · Space jump / double jump · C dash · left click (or J) light ·
-right click (or K) heavy · F or L hold guard. Strings: L L L, L K, L L K.
+right click (or K) heavy · F or L hold guard · Q / E / R abilities 1–3. Strings: L L L, L K, L L K.
 
 ---
 
@@ -37,7 +40,7 @@ right click (or K) heavy · F or L hold guard. Strings: L L L, L K, L L K.
 These are what make the rest possible. Every milestone keeps them.
 
 1. **The simulation is deterministic.** `physics.js`, `player.js`, `combat.js`, `ai.js`,
-   `sim.js`, `moves.js` (and anything they call) use only `+ - * /`, `Math.sqrt/abs/min/max/
+   `sim.js`, `moves.js`, `abilities.js` (and anything they call) use only `+ - * /`, `Math.sqrt/abs/min/max/
    floor/ceil`, comparisons and integer maths. No `Math.sin/cos/atan2/hypot/pow/exp/log`, no
    `**`, no `Math.random` (use the sim's seeded rng), no clocks, no DOM. Angles are unit vectors;
    rotations use constants written out as literals. A unit test greps for forbidden maths —
@@ -117,7 +120,19 @@ hitstop, pushback, guard drain/regen, the dummy's aggression. Only numbers chang
 Add: a short "Fight!" / "K.O." banner, three generated sounds (hit, block, guard break — tiny
 WebAudio synths, no files), dash and double-jump trails.
 
-### C. Stats and abilities from the skills (server)
+### C. Stats and abilities from the skills (server) — DONE 25 Nov
+
+What was built, and the choices made (Morrison can change any of them in one line):
+- Each stat follows one skill, linearly in level: Health ← Stamina (±20%), Guard ← Discipline
+  (±20%), Damage % ← Strength (±15%), Ability power % ← Intellect (±15%). Level 50 = 100%, the
+  tuned numbers. Mana is 100 for everyone. All in `ArenaRules::STATS` / `MANA`.
+- Fire bolt unlocks at **Intellect 1** (every hunter's first spell, so it can be tried now);
+  Second wind (Faith 10) and Iron skin (Discipline 20) are listed as "soon". `ArenaRules::ABILITIES`.
+- Fire bolt feel (frames, speed, cost 30, cooldown 1.5 s, damage 10): `ABILITIES` in `abilities.js`.
+- The dummy has no loadout (base numbers, no abilities) and guards against a cast it sees ~45% of
+  the time. Crit (Fortune) is left out on purpose: it needs randomness in every hit.
+
+The original brief:
 
 - Backend: `app/Support/Arena/ArenaRules.php` (every balance constant), `Loadout.php`
   (skills → stats). **Decided: skills matter only a little** — e.g. damage ±15%, health

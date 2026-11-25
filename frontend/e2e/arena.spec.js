@@ -92,11 +92,11 @@ test('the capsule falls, walks and collides — through the test hook', async ({
   s = await step(page, 1500)
   expect(s.player.grounded).toBe(true)
 
-  // Combat inputs are recognised but not live yet; garbage is rejected loudly.
-  expect(await input(page, 'ability:fire')).toEqual({
-    accepted: false,
-    reason: 'abilities arrive with the stats',
-  })
+  // Ability slots are live (milestone C); garbage is rejected loudly.
+  expect(await input(page, 'ability:1')).toEqual({ accepted: true })
+  await expect(page.evaluate(() => window.__arena.input('ability:fire'))).rejects.toThrow(
+    /Unknown arena input/,
+  )
   await expect(page.evaluate(() => window.__arena.input('jump-to-moon'))).rejects.toThrow(
     /Unknown arena input/,
   )
@@ -271,13 +271,16 @@ test('the fight: J J J combos the dummy, the HUD shows it, the dummy fights back
   const hits = events.filter((e) => e.type === 'hit').map((e) => e.move)
   expect(hits).toEqual(['L1', 'L2', 'L3'])
   let s = await page.evaluate(() => window.__arena.state())
-  expect(s.dummy.hp).toBe(100 - 6 - 7 - 9) // jab, cross, uppercut
-  await expect(page.getByTestId('hp-dummy')).toHaveAttribute('style', /width: 78%/)
+  // Jab, cross, uppercut (6, 7, 9) scaled by your Damage % from the server, rounded.
+  const pct = s.player.damage
+  const dealt = [6, 7, 9].reduce((t, d) => t + Math.floor((d * pct) / 100 + 0.5), 0)
+  expect(s.dummy.hp).toBe(100 - dealt)
+  await expect(page.getByTestId('hp-dummy')).toHaveAttribute('style', `width: ${100 - dealt}%;`)
 
   // Let the dummy fight: within ten seconds of standing next to it, it hits you.
   await page.evaluate(() => window.__arena.dummy('auto'))
   s = await step(page, 10000)
-  expect(s.player.hp).toBeLessThan(100)
+  expect(s.player.hp).toBeLessThan(s.player.maxHp)
 })
 
 test('guard: a shield sphere while blocking, shrinking with the guard meter', async ({ page }) => {
@@ -308,6 +311,85 @@ test('the stick follows the camera', async ({ page }) => {
   const p1 = (await step(page, 1000)).player.pos
   expect(p0.x - p1.x).toBeGreaterThan(4)
   expect(Math.abs(p1.z - p0.z)).toBeLessThan(0.1)
+})
+
+test('stats from your skills: the server loadout reaches the fighter and the HUD', async ({
+  page,
+}) => {
+  // The suite's hunter is fresh: every skill level 1 (e2e/global-setup.js).
+  await openArena(page)
+  const s = await page.evaluate(() => window.__arena.state())
+  const lo = await page.evaluate(() =>
+    fetch('/api/arena/loadout', {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    }).then((r) => r.json()),
+  )
+  expect(s.player.maxHp).toBe(lo.stats.health)
+  expect(s.player.guardMax).toBe(lo.stats.guard)
+  expect(s.player.damage).toBe(lo.stats.damage)
+  expect(s.player.power).toBe(lo.stats.ability_power)
+  expect(s.player.slots).toEqual(['fire_bolt', null, null])
+  // A fresh hunter: the bottom of the ±20% / ±15% band.
+  expect(lo.stats).toMatchObject({ health: 80, guard: 80, damage: 85, ability_power: 85 })
+
+  await expect(page.getByTestId('stat-health')).toHaveText('80')
+  await expect(page.getByTestId('stat-damage')).toHaveText('85%')
+  await expect(page.getByTestId('ability-fire_bolt')).toHaveAttribute('data-ready', 'yes')
+  await expect(page.getByTestId('ability-second_wind')).toContainText('soon')
+})
+
+test('fire bolt: Q casts, the orb flies, it lands, the HUD shows the cooldown', async ({
+  page,
+}) => {
+  await openArena(page)
+  await page.evaluate(() => window.__arena.teleport({ x: 0, y: 0.95, z: 9 }))
+  await step(page, 400)
+  const events = []
+  expect(await input(page, 'ability:1')).toEqual({ accepted: true })
+  let s = await step(page, 17)
+  expect(s.player.combat).toBe('cast')
+  await expect(page.getByTestId('ability-fire_bolt')).toHaveAttribute('data-ready', 'no')
+  // In flight: a projectile in the sim, an orb on screen.
+  for (let i = 0; i < 25 && !s.projectiles.length; i++) s = await step(page, 17)
+  expect(s.projectiles).toHaveLength(1)
+  expect((await page.evaluate(() => window.__arena.debug())).bolts).toBe(1)
+  for (let i = 0; i < 60; i++) {
+    s = await step(page, 17)
+    events.push(...s.events)
+    if (events.some((e) => e.move === 'fire_bolt')) break
+  }
+  const hit = events.find((e) => e.move === 'fire_bolt')
+  expect(hit).toMatchObject({ type: 'hit', fire: true, attacker: 'player', target: 'dummy' })
+  expect(hit.damage).toBe(Math.floor((10 * s.player.power) / 100 + 0.5))
+  expect(s.dummy.hp).toBe(100 - hit.damage)
+  expect((await page.evaluate(() => window.__arena.debug())).bolts).toBe(0)
+  // The cooldown counts down on the slot.
+  await expect(page.getByTestId('ability-fire_bolt')).toContainText(/\ds/)
+  await step(page, 1500)
+  await expect(page.getByTestId('ability-fire_bolt')).toHaveAttribute('data-ready', 'yes')
+})
+
+test('screenshots: a fire bolt in flight and landing (milestone C)', async ({ page }) => {
+  await openArena(page)
+  await page.evaluate(() => window.__arena.camera({ yaw: -62, pitch: 14, distance: 9 }))
+  await page.evaluate(() => window.__arena.teleport({ x: 0, y: 0.95, z: 9.5 }))
+  await step(page, 400)
+  await input(page, 'ability:1')
+  let s = await step(page, 17)
+  // Mid-flight: about halfway to the dummy.
+  for (let i = 0; i < 40; i++) {
+    s = await step(page, 17)
+    if (s.projectiles[0] && s.projectiles[0].z < 6.2) break
+  }
+  await page.screenshot({ path: `${SHOTS}arena-c-firebolt.png` })
+  // The impact, frozen in the target's hitstop.
+  for (let i = 0; i < 40; i++) {
+    s = await step(page, 17)
+    if (s.events.some((e) => e.move === 'fire_bolt')) break
+  }
+  await page.screenshot({ path: `${SHOTS}arena-c-impact.png` })
+  expect(s.dummy.hp).toBeLessThan(100)
 })
 
 test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({ page }) => {

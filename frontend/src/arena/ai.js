@@ -20,6 +20,8 @@ export const AI = {
   thinkMin: 18, // frames between decisions when in range
   thinkSpread: 30,
   guardKeep: 35, // won't start blocking with less guard than this left
+  castSeeRange: 12, // reacts to a spell cast this close...
+  castGuardFrames: 24, // ...by guarding this long plus the bolt's flight time
 }
 
 export function createBrain(mode = 'auto') {
@@ -32,6 +34,7 @@ export function createBrain(mode = 'auto') {
     string: 0, // extra presses left in the current string
     finisher: false, // end the string with heavy
     seenMove: -1, // the opponent's last move it reacted to
+    seenCast: -1, // ...and their last cast
   }
 }
 
@@ -45,6 +48,7 @@ const idle = () => ({
   heavyPressed: false,
   block: false,
   dashPressed: false,
+  abilityPressed: 0,
 })
 
 // One step of thinking. Returns this step's controls for `self`.
@@ -74,6 +78,13 @@ export function think(b, self, foe, rng) {
     b.seenMove = foe.c.moveCount
     if (d < AI.blockSeeRange && canAct && sc.guard > AI.guardKeep && rng() < AI.blockChance) {
       b.blockFor = MOVES[foe.c.move].startup + MOVES[foe.c.move].active + 14
+    }
+  }
+  // See a spell being cast: maybe guard until it would arrive (1 m = 60/speed frames).
+  if (b.mode === 'auto' && foe.c.state === 'cast' && foe.c.castCount !== b.seenCast) {
+    b.seenCast = foe.c.castCount
+    if (d < AI.castSeeRange && canAct && sc.guard > AI.guardKeep && rng() < AI.blockChance) {
+      b.blockFor = AI.castGuardFrames + Math.ceil((d * 60) / 16)
     }
   }
   if (b.blockFor > 0 && canAct) {

@@ -458,15 +458,28 @@ mid-air you can cling to a wall and kick off it. Space again in the air is a dou
 around with the mouse (click the arena to capture it) and fight with left click (light: jab,
 cross, uppercut), right click (heavy), F (hold to guard: a shield sphere that shrinks as the
 guard meter drains, and breaks at zero) and C (dash), against a training dummy that wanders,
-attacks, blocks and dashes on the same rules. The plan to finish it is
+attacks, blocks and dashes on the same rules.
+
+**Milestone C (stats and abilities):** your fighter comes from your skills. `GET /api/arena/loadout`
+(`ArenaController`, logic in `app/Support/Arena/`: `ArenaRules` holds every balance number,
+`Loadout` turns skill levels into stats) returns Health (Stamina), Guard (Discipline), Damage %
+(Strength) and Ability power % (Intellect), each moving only a little with the skill: from −20% /
+−15% at level 1 to +20% / +15% at level 99, with level 50 fighting exactly like the frame data was
+tuned. It also lists the abilities and whether each is unlocked. The page loads it
+(`stores/arena.js`) before the fight starts and hands it to the simulation as an input; the HUD
+shows the stats and an ability bar. Q casts **Fire bolt**: a wind-up you can be hit out of, then a
+glowing orb that flies about 14 m, blockable (costs guard), dodged by a dash or by stepping out of
+its line, stopped by walls; 30 mana, 1.5 s cooldown. E and R show what is coming (Second wind,
+Iron skin). The plan to finish it is
 `docs/arena-build-guide.md`. The game runs on a fixed
 1/60 s step in plain JavaScript (`src/arena/`) on our own deterministic physics, so the same
 inputs give the same result on every machine — the foundation for online fights. Vue only shows
 a small HUD the game updates five times a second. With `?test=1` nothing moves on its own and
 tests drive it step by step through `window.__arena`.
 
-*Code:* `ArenaView.vue`, `src/arena/` (`engine`, `sim`, `physics`, `player`, `moves`, `combat`,
-`ai`, `effects`, `shield`, `loop`, `world`, `figure`, `input`, `rooms/`). Assets and licences: `docs/arena-assets.md`.
+*Code:* `ArenaView.vue`, `stores/arena.js`, `src/arena/` (`engine`, `sim`, `physics`, `player`,
+`moves`, `combat`, `abilities`, `ai`, `effects`, `bolts`, `shield`, `loop`, `world`, `figure`,
+`input`, `rooms/`); backend `ArenaController`, `app/Support/Arena/`. Assets and licences: `docs/arena-assets.md`.
 
 ---
 

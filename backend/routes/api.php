@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AchievementController;
+use App\Http\Controllers\ArenaController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BriefcaseController;
 use App\Http\Controllers\CalendarController;
@@ -81,6 +82,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/coach', [CoachController::class, 'clear']);
 
     Route::get('/days/{date}', [DayController::class, 'show']);
+
+    Route::get('/arena/loadout', [ArenaController::class, 'loadout']);
 
     Route::get('/achievements', [AchievementController::class, 'index']);
     Route::post('/achievements', [AchievementController::class, 'store']);

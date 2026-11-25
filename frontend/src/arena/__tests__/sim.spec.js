@@ -471,7 +471,14 @@ describe('determinism, the parts online play needs', () => {
     // + - * / and sqrt are exactly rounded everywhere; these are not.
     const risky =
       /Math\.(sin|cos|tan|asin|acos|atan|atan2|hypot|pow|exp|log|cbrt|sinh|cosh|tanh)\b|\*\*/
-    for (const file of ['physics.js', 'player.js', 'combat.js', 'ai.js', 'moves.js']) {
+    for (const file of [
+      'physics.js',
+      'player.js',
+      'combat.js',
+      'ai.js',
+      'moves.js',
+      'abilities.js',
+    ]) {
       const src = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')
       const code = src
         .split('\n')

@@ -5,7 +5,7 @@ Paste the block below into a **new chat**. Everything after it is in the docs fo
 ---
 
 I'm Morrison, working on **Mayhem**, my Solo Leveling style productivity app. Repo
-`Morris420/Mayhem`. Attach and clone it, then create and work on a branch called `arena`
+`Morris420/Mayhem`. Attach and clone it, then check out and work on the `arena` branch
 (`main` is the live site; finished milestones go to `main` by pull request).
 
 **The project.** A Laravel 13 API (Sanctum SPA auth, MySQL locally via XAMPP, SQLite in tests)
@@ -31,9 +31,12 @@ Read these in order before doing anything:
 3. `docs/arena-playbook.md`: conventions, the test harness, gotchas we already hit
 4. `docs/arena-design.md` (§0 has my decisions) and `docs/system-guide.md` (the app)
 
+Where the docs disagree, `arena-design.md` §0 (my decisions) and the build guide win, and the
+code beats both — fix the doc you found wrong.
+
 **Today:** start milestone **A** in the build guide if I've attached or connected my VRoid
-model and Mixamo clips; otherwise start milestone **C** (stats and abilities from my skills,
-first ability a fire bolt).
+model and Mixamo clips; otherwise start milestone **D** (the boss and a real fight, with the
+server validating results). Milestone C (stats from skills, the fire bolt) is done.
 
 **How to work:** take the whole milestone, test it (unit, browser, backend if touched), show
 me a screenshot, commit and push to `arena`, and update `docs/roadmap.md`. Ask me only what

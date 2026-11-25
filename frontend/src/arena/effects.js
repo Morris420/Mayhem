@@ -27,7 +27,14 @@ function sparkTexture() {
   return new THREE.CanvasTexture(canvas)
 }
 
-const COLORS = { hit: '#ffcf6e', ko: '#ffffff', block: '#5fe3f5', guardbreak: '#bdf6ff' }
+const COLORS = {
+  hit: '#ffcf6e',
+  ko: '#ffffff',
+  block: '#5fe3f5',
+  guardbreak: '#bdf6ff',
+  fire: '#ff8a3d', // a fire bolt landing
+  fizzle: '#ff6a1e', // ...or hitting a wall / running out
+}
 
 export function createEffects(scene) {
   const tex = sparkTexture()
@@ -40,7 +47,12 @@ export function createEffects(scene) {
     spawn(e) {
       const mat = new THREE.SpriteMaterial({
         map: tex,
-        color: COLORS[e.type] ?? COLORS.hit,
+        color:
+          e.type === 'fizzle'
+            ? COLORS.fizzle
+            : e.fire && e.type !== 'block'
+              ? COLORS.fire
+              : (COLORS[e.type] ?? COLORS.hit),
         transparent: true,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
@@ -50,13 +62,17 @@ export function createEffects(scene) {
       sprite.renderOrder = 2
       scene.add(sprite)
       const big =
-        e.type === 'ko' || e.type === 'guardbreak'
-          ? 2.2
-          : e.heavy
-            ? 1.6
-            : e.type === 'block'
-              ? 0.8
-              : 1.1
+        e.type === 'fizzle'
+          ? 0.7
+          : e.fire && e.type === 'hit'
+            ? 1.5
+            : e.type === 'ko' || e.type === 'guardbreak'
+              ? 2.2
+              : e.heavy
+                ? 1.6
+                : e.type === 'block'
+                  ? 0.8
+                  : 1.1
       live.push({ sprite, age: 0, life: e.type === 'ko' ? 0.35 : 0.2, big })
       if (e.heavy || e.type === 'ko' || e.type === 'guardbreak') {
         shake = e.type === 'ko' ? 0.3 : 0.16

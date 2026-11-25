@@ -193,7 +193,13 @@ the client is what makes that port possible rather than a rewrite.
 
 ## 5. Skills become a fighter
 
-First draft, all tunable in `ArenaRules`:
+**Built in milestone C (25 Nov), replacing the draft below:** Health ← Stamina, Guard ← Discipline
+(±20%), Damage % ← Strength, Ability power % ← Intellect (±15%), linear in level, level 50 = the
+tuned frame data. Anchors in `tests/Unit/ArenaRulesTest.php`: fresh = 80 health / 85% damage,
+level 50 = 100 / 100%, maxed = 120 / 115%. Do not build the draft's 6× gap: Morrison decided
+skills matter only a little (arena-design §0, decision 2).
+
+Original first draft, for the record:
 
 | Stat | Formula |
 |---|---|

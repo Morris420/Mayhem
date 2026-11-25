@@ -67,9 +67,15 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
   - Controls: mouse look (click the arena to capture the mouse, Esc releases, wheel zooms), left click light, right click heavy, F (or L) guard, C dash; the stick follows the camera.
   - Guard meter: blocking costs guard (per move), holding drains it slowly, it refills after a pause; at zero the guard breaks (stunned and open). A see-through shield sphere shows while guarding and shrinks with the meter; guard bars in the HUD.
   - Tests: 75 unit, 19 browser.
-- **Next: the whole remaining plan is `docs/arena-build-guide.md`** (milestones A-G and the production checklist). Start a new chat with `docs/next-session-prompt.md`; work on the `arena` branch.
+- **Milestone C - stats and abilities from your skills: DONE (25 Nov, branch `arena`).** Screenshots: docs/screenshots/arena-c-*.png.
+  - `GET /api/arena/loadout`: Health (Stamina), Guard (Discipline), Damage % (Strength), Ability power % (Intellect), each only ±15-20% between level 1 and 99 (level 50 = the tuned numbers). Every number in `backend/app/Support/Arena/ArenaRules.php`.
+  - The page loads it before the fight; the sim takes it as fighter options (never computes it). HUD: stat card, mana bar, ability bar (Q / E / R) with cooldowns.
+  - **Fire bolt** (Q, Intellect 1): interruptible wind-up, a glowing orb with a trail, ~14 m; blockable (costs guard), dodged by a dash or a sidestep, stopped by walls; 30 mana, 1.5 s cooldown. Projectiles are part of `snapshot()`, so rewinds replay bolts in flight.
+  - Tests: 90 unit (15 new for abilities and loadouts, incl. rewind with a bolt in flight), 22 browser, backend 118 (7 new).
+- **Next: milestone A (your VRoid hunter) when the model and Mixamo clips are attached, else D (the boss).** The whole remaining plan is `docs/arena-build-guide.md` (milestones A-G and the production checklist). Start a new chat with `docs/next-session-prompt.md`; work on the `arena` branch.
 
 ## Arena: decisions waiting for you
+- Milestone C balance (my picks, all one-line changes in `ArenaRules`): fresh hunter = 80 health / 85% damage, maxed = 120 / 115%; Fire bolt unlocked from Intellect 1 so you can try it now.
 - Nav change (FYI, touches the System): labels show from 1280 px up, icons below. Alternative: drop the username from the header instead.
 - Mouse: right click = heavy and F = guard were my picks (you asked for left click = attack); easy to swap in `input.js`.
 - The hunter is a placeholder (KayKit, chibi). Your VRoid + Mixamo hunter replaces it.
