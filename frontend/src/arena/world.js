@@ -41,7 +41,7 @@ function trimGeometries(room) {
     for (const y of ys) out.push(boxGeometry([p.x, y, p.z], [s, BAND / 2, s]))
   }
   // Blocks: a glowing edge round the top, so you can read where to land.
-  for (const b of room.blocks ?? []) {
+  for (const b of room.blockTrim === false ? [] : (room.blocks ?? [])) {
     const y = b.h - BAND / 2
     const hx = b.w / 2 + LIP
     const hz = b.d / 2 + LIP
@@ -101,7 +101,7 @@ function dust(room, count = 260) {
   const geo = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
   const mat = new THREE.PointsMaterial({
-    color: room.colors.trim,
+    color: room.colors.dust ?? room.colors.trim,
     map: dotTexture(),
     size: 0.06,
     transparent: true,
@@ -202,7 +202,7 @@ export function buildRoomScene(room) {
   ring.rotation.x = -Math.PI / 2
   ring.position.y = 0.01
   ring.name = 'center-ring'
-  group.add(ring)
+  if (room.centerRing !== false) group.add(ring)
 
   const motes = dust(room)
   group.add(motes)
@@ -215,6 +215,12 @@ export function buildRoomScene(room) {
   const key = new THREE.DirectionalLight(L.moon ?? '#a9d8ff', L.moonIntensity ?? 0.6)
   key.position.set(5, 12, 7)
   group.add(key)
+  if (L.fill) {
+    // A second, softer key from the other side so nothing falls into black.
+    const fill = new THREE.DirectionalLight(L.fill, L.fillIntensity ?? 0.6)
+    fill.position.set(-8, 9, -6)
+    group.add(fill)
+  }
 
   group.userData.update = (t) => motes.userData.update(t)
   return group

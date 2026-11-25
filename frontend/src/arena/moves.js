@@ -133,12 +133,15 @@ export const moveFrames = (m) => m.startup + m.active + m.recovery
 export const COMBAT = {
   maxHp: 100,
   blockArc: 0.5, // cos of the half-angle you can block in: 0.5 = 60° each side. Behind you is open.
-  dashSpeed: 13, // m/s
-  dashFrames: 12, // total, including recovery
-  dashMoveFrames: 9, // frames of the dash that actually travel
-  dashBrake: 0.2, // speed kept when the burst ends (0 = dead stop)
-  dashInvuln: 6, // frames at the start of a dash where nothing hits you
-  dashCooldown: 18, // frames before the next dash
+  // The dash is a committed roll (Morrison, 25 Nov): a hop, a full roll, and no
+  // other input until it is over.
+  dashSpeed: 9.5, // m/s
+  dashHop: 5, // m/s upwards at the start: ~0.5 m off the floor
+  dashFrames: 36, // total, including getting back up; nothing else until it ends
+  dashMoveFrames: 28, // frames of the dash that actually travel
+  dashBrake: 0.15, // speed kept when the roll ends (0 = dead stop)
+  dashInvuln: 12, // frames at the start of a dash where nothing hits you
+  dashCooldown: 14, // frames after the roll before the next one
   knockdownFrames: 45, // lying on the floor
   getupFrames: 18, // standing back up (invulnerable)
   koFrames: 150, // KO'd, then back on your feet with full health (it's a training room)

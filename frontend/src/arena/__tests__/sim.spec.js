@@ -403,6 +403,23 @@ describe('wall hug and wall jump', () => {
     sim.dispose()
   })
 
+  it('after a wall jump, no more jumps until you land', () => {
+    const sim = hugLeftWall()
+    sim.press('jump')
+    sim.step()
+    expect(sim.state().player.lastJump).toBe('wall')
+    steps(sim, 12)
+    sim.press('jump') // no double jump
+    steps(sim, 2)
+    expect(sim.state().player.jumps).toBe(2)
+    expect(sim.state().player.lastJump).toBe('wall')
+    run(sim, 2000) // land: jumps come back
+    sim.press('jump')
+    steps(sim, 2)
+    expect(sim.state().player.jumps).toBe(3)
+    sim.dispose()
+  })
+
   it('the wall jump goes higher than a normal jump', () => {
     expect(MOVE.wallJumpUp).toBeGreaterThan(MOVE.jumpSpeed)
   })

@@ -51,21 +51,30 @@ const room = {
   drawWalls: false,
   drawGrid: false,
   wallTrim: false,
-  // Warm torch light, cold blue sky light: a dungeon behind a gate.
+  // Bright and warm: daylight falling in from above, torches on the walls. No
+  // blue cast anywhere (Morrison, 25 Nov: "light it up significantly more").
   light: {
-    sky: '#5d6f9e',
-    ground: '#1a1410',
-    skyIntensity: 0.75,
-    moon: '#9fb4ff',
-    moonIntensity: 0.55,
+    sky: '#fff3e2',
+    ground: '#6b5a48',
+    skyIntensity: 1.1,
+    moon: '#fff0dc', // the key light (daylight from above)
+    moonIntensity: 1.5,
+    fill: '#ffe6c8',
+    fillIntensity: 0.5,
   },
-  torchLight: { color: '#ff9a4a', intensity: 22, distance: 16 },
+  torchLight: { color: '#ffa860', intensity: 30, distance: 18 },
+  exposure: 0.95,
+  fogDensity: 0.008,
+  blockTrim: false,
+  centerRing: false,
 
   colors: {
-    background: '#03050a',
+    background: '#2a2520',
+    fog: '#3a332c',
+    dust: '#ffd9a8',
     floor: '#05070b',
     wall: '#0c1222',
-    block: '#152038',
+    block: '#6e675e', // stone
     trim: '#17a9bd', // the app's cyan, dimmed
     enemy: '#e0435a', // the dummy's outline
     grid: '#0b4f5c',

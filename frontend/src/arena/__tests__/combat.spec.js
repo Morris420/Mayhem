@@ -290,8 +290,8 @@ describe('dash', () => {
     sim.setInput({ x: 0 })
     run(sim, 400)
     const moved = sim.state().player.pos.x - x0
-    expect(moved).toBeGreaterThan(1.8)
-    expect(moved).toBeLessThan(3)
+    expect(moved).toBeGreaterThan(3) // a full roll
+    expect(moved).toBeLessThan(4.5)
   })
 
   it('no direction = a backdash, away from where you face, still facing forward', () => {
@@ -300,7 +300,7 @@ describe('dash', () => {
     const facing = sim.state().player.facing
     sim.press('dash')
     run(sim, 400)
-    expect(sim.state().player.pos.z - z0).toBeGreaterThan(1.8) // facing -z, so back is +z
+    expect(sim.state().player.pos.z - z0).toBeGreaterThan(2.5) // facing -z, so back is +z
     expect(sim.state().player.facing).toEqual(facing)
   })
 
@@ -317,12 +317,33 @@ describe('dash', () => {
     expect(sim.state().player.hp).toBe(COMBAT.maxHp)
   })
 
+  const steps = (sim, n) => {
+    for (let i = 0; i < n; i++) sim.step()
+  }
+
+  it('is a committed roll: a hop, and no other input until it is over', () => {
+    const sim = face(6)
+    sim.setInput({ x: 1 })
+    sim.press('dash')
+    sim.step()
+    expect(sim.state().player.vel.y).toBeGreaterThan(0) // the hop
+    sim.press('light') // ignored mid-roll
+    sim.press('jump')
+    steps(sim, 4)
+    expect(sim.state().player.combat).toBe('dash')
+    steps(sim, COMBAT.dashFrames - 12)
+    expect(sim.state().player.combat).toBe('dash')
+    expect(sim.state().player.move).toBeFalsy()
+    steps(sim, 12)
+    expect(sim.state().player.combat).toBe('free')
+  })
+
   it('has a cooldown', () => {
     const sim = face(6)
     sim.press('dash')
-    run(sim, 250)
+    run(sim, (COMBAT.dashFrames * 1000) / 60 + 20) // the roll is over...
     const z = sim.state().player.pos.z
-    sim.press('dash') // too soon
+    sim.press('dash') // ...but the cooldown is not
     run(sim, 300)
     expect(Math.abs(sim.state().player.pos.z - z)).toBeLessThan(0.3)
   })

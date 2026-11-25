@@ -130,6 +130,8 @@ function startDash(f, ctl) {
   }
   s.vel.x = dx * COMBAT.dashSpeed
   s.vel.z = dz * COMBAT.dashSpeed
+  s.vel.y = COMBAT.dashHop
+  s.grounded = false
   s.lock = COMBAT.dashMoveFrames / 60
   c.state = 'dash'
   c.timer = COMBAT.dashFrames

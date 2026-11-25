@@ -36,24 +36,21 @@ async function openArena(page) {
 const step = (page, ms) => page.evaluate((ms) => window.__arena.step(ms), ms)
 const input = (page, a) => page.evaluate((a) => window.__arena.input(a), a)
 
-test('the arena loads and actually draws the neon room', async ({ page }) => {
+test('the arena loads and actually draws the lit dungeon', async ({ page }) => {
   await openArena(page)
   await expect(page.locator('canvas[data-arena="canvas"]')).toBeVisible()
 
   const px = await page.evaluate(() => window.__arena.pixels())
   expect(px.width).toBeGreaterThan(300)
-  // The room is meant to be dark: only a few percent of pixels are lit at all.
-  expect(px.lit, 'share of non-black pixels').toBeGreaterThan(0.02)
-  expect(px.cyan, 'share of neon-cyan pixels (trim, grid, ring, hunter outline)').toBeGreaterThan(
-    0.002,
-  )
+  // A bright, warm room (25 Nov): most of the frame is lit, and no blue cast.
+  expect(px.lit, 'share of non-black pixels').toBeGreaterThan(0.5)
+  expect(px.cyan, 'share of neon-cyan pixels').toBeLessThan(0.02)
 
   // The hunter model loaded (not the capsule fallback).
   const dbg = await page.evaluate(() => window.__arena.debug())
   expect(dbg.figure).toBe('hunter')
-  // Budget (playbook §6): room ~8 calls, bloom ~12, and per fighter one call per
-  // material (the VRoid hunter has 15) plus its outline. ~85 for two fighters;
-  // drops once textures arrive and parts can share one material.
+  // Budget (playbook §6): room and kit ~30 calls, bloom ~12, and per fighter one
+  // call per material (the VRoid hunter has 15; no outline pass any more).
   expect(dbg.drawCalls).toBeGreaterThan(5)
   expect(dbg.drawCalls).toBeLessThan(120)
 })

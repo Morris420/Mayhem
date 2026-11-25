@@ -30,33 +30,30 @@ import { createShield } from './shield.js'
 import { createBolts } from './bolts.js'
 import { createFixedStep, stepsFor, STEP_S } from './loop.js'
 
-// The camera orbits the player under mouse control (click the arena to capture
-// the mouse, Esc to let go; wheel zooms). It starts behind the player looking
-// towards -z. When an opponent is near, it looks at the middle of the fight and
-// pulls in a little. The stick is always relative to where the camera looks.
+// A free third-person camera: it orbits the player wherever the mouse puts it
+// (click the arena to capture the mouse, Esc to let go; wheel zooms), like a
+// shooter or a 3D fighter. Nothing turns it for you. Near a wall it slides in
+// along its own line instead of being pinned, so it never sticks. The stick is
+// always relative to where the camera looks.
 export const CAMERA = {
   distance: 8, // metres, horizontally, behind what it looks at
-  pitch: 0.423, // radians above horizontal (~24°): with distance 8 = 4.4 m up
-  minPitch: 0.05,
-  maxPitch: 1.2,
+  pitch: 0.38, // radians above horizontal (~22°)
+  minPitch: -0.35, // a little below the player, looking up
+  maxPitch: 1.35, // almost straight down
   minDistance: 4,
   maxDistance: 14,
   sensitivity: 0.0025, // radians per pixel of mouse movement
   zoomStep: 0.8, // metres per wheel notch
   lookHeight: 0.8,
   fov: 55,
-  wallMargin: 1.8, // keep the camera this far from walls: close neon strips glare
-  belowTop: 1.2, // and this far below the top of the walls
-  followY: 6, // how quickly the camera follows a jump (1/s); lower = calmer
-  framing: 0.5, // how far towards a nearby opponent the camera looks (0 = not at all)
-  framingRange: 12, // ...when they are within this many metres
-  fightZoom: 0.85, // in a fight the camera comes this much closer
-  fightEase: 2.5, // how quickly it eases in and out of fight framing (1/s)
+  wallMargin: 0.6, // the camera stops this far from a wall (it slides in along its line)
+  minHeight: 0.35, // and this far above the floor
+  followY: 8, // how quickly the camera follows a jump (1/s); lower = calmer
 }
 
 // Bloom: subtle. Raise `strength` for more glow, lower `threshold` to make more
 // of the room glow.
-export const BLOOM = { strength: 0.55, radius: 0.45, threshold: 0.22 }
+export const BLOOM = { strength: 0.45, radius: 0.4, threshold: 0.85 }
 
 // How often the Vue HUD is told about the game. Vue never runs inside the frame loop.
 const HUD_INTERVAL_MS = 100
@@ -89,7 +86,7 @@ export async function createArena(
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.0
+  renderer.toneMappingExposure = room.exposure ?? 1.0
   renderer.domElement.style.display = 'block'
   renderer.domElement.style.width = '100%'
   renderer.domElement.style.height = '100%'
@@ -102,7 +99,7 @@ export async function createArena(
   // --- scene ----------------------------------------------------------------
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(room.colors.background)
-  scene.fog = new THREE.FogExp2(room.colors.background, 0.025)
+  scene.fog = new THREE.FogExp2(room.colors.fog ?? room.colors.background, room.fogDensity ?? 0.025)
   const roomScene = buildRoomScene(room)
   scene.add(roomScene)
   const effects = createEffects(scene)
@@ -213,7 +210,6 @@ export async function createArena(
   const lerpAngle = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t
   const inner = { x: room.width / 2 - CAMERA.wallMargin, z: room.depth / 2 - CAMERA.wallMargin }
   let camY = null // smoothed height the camera follows
-  let engaged = 0 // 0 = exploring, 1 = fighting someone close (eased)
   // Mouse-controlled orbit. yaw 0 = looking towards -z.
   const view = { yaw: 0, pitch: CAMERA.pitch, distance: CAMERA.distance }
   const camDir = { x: 0, z: -1 } // horizontal look direction, from yaw
@@ -245,32 +241,26 @@ export async function createArena(
     const me = pos[0]
     camY =
       camY === null || dt === 0 ? me.y : camY + (me.y - camY) * Math.min(1, dt * CAMERA.followY)
-    // How close a fight is: the camera frames it when someone is near.
-    let near = 0
-    let fx = 0
-    let fz = 0
-    if (pos[1]) {
-      fx = pos[1].x - me.x
-      fz = pos[1].z - me.z
-      const d = Math.sqrt(fx * fx + fz * fz)
-      near = Math.min(1, Math.max(0, (CAMERA.framingRange - d) / 4))
+    // An orbit round the player, exactly where the mouse put it.
+    look.set(me.x, camY + CAMERA.lookHeight, me.z)
+    const cp = Math.cos(view.pitch)
+    const dx = -camDir.x * cp
+    const dy = Math.sin(view.pitch)
+    const dz = -camDir.z * cp
+    // Walls, floor and ceiling: shorten the boom so the camera stays inside.
+    let boom = view.distance
+    const fit = (from, d, lo, hi) => {
+      if (d > 1e-6 && from + d * boom > hi) boom = Math.max(0.5, (hi - from) / d)
+      if (d < -1e-6 && from + d * boom < lo) boom = Math.max(0.5, (lo - from) / d)
     }
-    engaged = dt === 0 ? near : engaged + (near - engaged) * Math.min(1, dt * CAMERA.fightEase)
-
-    // Look at the player, or the middle of the fight, from where the mouse put us.
-    const lx = me.x + fx * CAMERA.framing * engaged
-    const lz = me.z + fz * CAMERA.framing * engaged
-    look.set(lx, camY + CAMERA.lookHeight, lz)
-    const dist = view.distance * (1 - (1 - CAMERA.fightZoom) * engaged)
+    fit(look.x, dx, -inner.x, inner.x)
+    fit(look.z, dz, -inner.z, inner.z)
+    fit(look.y, dy, CAMERA.minHeight, room.wallHeight - 0.3)
     const shake = effects.shakeOffset(elapsed)
-    // Kept inside the walls, above the floor and below the top of the walls.
     camera.position.set(
-      Math.max(-inner.x, Math.min(inner.x, lx - camDir.x * dist)) + shake.x,
-      Math.max(
-        0.6,
-        Math.min(look.y + dist * Math.tan(view.pitch), room.wallHeight - CAMERA.belowTop),
-      ) + shake.y,
-      Math.max(-inner.z, Math.min(inner.z, lz - camDir.z * dist)),
+      look.x + dx * boom + shake.x,
+      look.y + dy * boom + shake.y,
+      look.z + dz * boom,
     )
     camera.lookAt(look)
     renderer.info.reset()

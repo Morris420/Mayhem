@@ -84,6 +84,7 @@ export function createPlayer(world, spawn) {
     jumps: 0, // counts every jump, so the renderer can tell a new one started
     lastJump: null, // 'ground' | 'wall' | 'double'
     airJumpUsed: false, // the double jump, used since leaving the ground
+    wallJumpUsed: false, // one wall jump per time in the air, and it ends your jumps
     // timers, in seconds
     coyote: 0,
     buffer: 0,
@@ -133,7 +134,7 @@ export function createPlayer(world, spawn) {
         s.vel.y = MOVE.jumpSpeed
         s.lastJump = 'ground'
         jumpedNow = true
-      } else if (s.wallGrace > 0 && s.lastWall) {
+      } else if (s.wallGrace > 0 && s.lastWall && !s.wallJumpUsed) {
         // Kick off the wall: up and away, and briefly ignore the stick so you
         // actually leave the wall instead of re-hugging it.
         s.vel.y = MOVE.wallJumpUp
@@ -145,7 +146,8 @@ export function createPlayer(world, spawn) {
         s.lastJump = 'wall'
         s.wallGrace = 0
         s.wall = null
-        s.airJumpUsed = false // a wall jump gives you your double jump back
+        s.airJumpUsed = true // and that's it: no double jump after a wall jump
+        s.wallJumpUsed = true // nor a second wall jump, until you land
         jumpedNow = true
       } else if (!s.grounded && !s.airJumpUsed) {
         // Double jump: up again, and off in the direction you steer; with no
@@ -220,6 +222,7 @@ export function createPlayer(world, spawn) {
     if (s.grounded) {
       s.lastWall = null
       s.airJumpUsed = false
+      s.wallJumpUsed = false
     }
 
     // A wall that stopped us also stops the velocity, so letting go of the key
@@ -257,6 +260,7 @@ export function createPlayer(world, spawn) {
     s.coyote = s.buffer = s.wallGrace = s.lock = 0
     s.fromJump = false
     s.airJumpUsed = false
+    s.wallJumpUsed = false
   }
 
   return { state: s, update, teleport }

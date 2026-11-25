@@ -5,7 +5,7 @@ Every asset in the repo gets a line here: source, licence, what we changed. No e
 
 | File | Source | Licence | Changes |
 |---|---|---|---|
-| `frontend/public/models/arena/hunter.glb` | **Morrison's own hunter**: made in VRoid Studio, rigged and animated on Mixamo (Adobe), 14 FBX downloads (25 Nov) | Character: ours. Animations: Mixamo, royalty-free for use in games; the raw Mixamo FBX files may not be redistributed, so they stay **out of the repo** | Converted offline (scratch folder, not the repo): three.js `FBXLoader` → `GLTFExporter` in headless Chromium, every clip cut to the part we use and made in-place, stray Blender "Cube" removed, materials replaced by plain named ones (the FBX had no textures), then glTF-Transform `resample / dedup (no materials) / prune / weld / quantize`. 16 clips, 1.84 MB (≈870 KB gzipped). Coloured at runtime by material name in `figure.js` (toon shading, outline, glowing eyes; the dummy gets a crimson palette) |
+| `frontend/public/models/arena/hunter.glb` | **Morrison's own hunter**: made in VRoid Studio, rigged and animated on Mixamo (Adobe), 14 FBX downloads (25 Nov) | Character: ours. Animations: Mixamo, royalty-free for use in games; the raw Mixamo FBX files may not be redistributed, so they stay **out of the repo** | Converted offline (scratch folder, not the repo): three.js `FBXLoader` → `GLTFExporter` in headless Chromium, every clip cut to the part we use and made in-place, stray Blender "Cube" removed, materials replaced by plain named ones (the FBX had no textures). The textures were then put back from Morrison's `MayhemBase.vrm` (matched by material name, resized to ≤1024 px, WebP), then glTF-Transform `resample / dedup (no materials) / prune / weld / quantize`. 16 clips, 2.3 MB (≈1.26 MB gzipped). Toon-shaded at runtime in `figure.js`, no outline; the dummy is the same hunter tinted crimson with red eyes |
 | `frontend/public/models/arena/dungeon-kit.glb` | **KayKit Dungeon Remastered** by Kay Lousberg, github.com/KayKit-Game-Assets (also kaylousberg.itch.io) | **CC0 1.0** (credit optional: "Kay Lousberg, www.kaylousberg.com") | 15 pieces merged into one file (one node per piece): floor_tile_large, floor_tile_large_rocks, wall, wall_arched, wall_cracked, wall_corner, pillar, pillar_decorated, torch_mounted, banner_patternA_blue, banner_thin_blue, rubble_large, rubble_half, barrel_large, crates_stacked. 353 KB. Placed by `rooms/training-hall.js` (`dress()`), drawn as instanced meshes |
 
 ## Clips in `hunter.glb`
@@ -22,9 +22,8 @@ Every asset in the repo gets a line here: source, licence, what we changed. No e
 | `Jab`, `Straight`, `Uppercut`, `Cross`, `BodyBlow` | cut from one Uppercut Jab flurry | light combo (jab → straight → uppercut), heavy, launcher |
 | `Emote` | Swing Dancing (0–6 s) | T |
 
-Not there yet (wanted): Knocked Down, Getting Up, Dying, Center Block, a kick or hook. Textures:
-the VRoid textures did not survive Mixamo; with the `.vrm` (or its texture PNGs) we can put them
-back.
+Not there yet (wanted): a better roll, Knocked Down, Getting Up, Dying, Center Block, a kick or
+hook, a spellcast. The `.vrm` itself stays out of the repo (it is only the texture source).
 
 ## How to add a clip
 

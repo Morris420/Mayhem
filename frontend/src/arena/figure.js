@@ -2,9 +2,9 @@
 // simulation, so the model, its animations and every effect can change freely
 // without touching determinism.
 //
-//   createHunterFigure()   the hunter: a CC0 glTF character (KayKit, see
-//                          docs/arena-assets.md), dark toon-shaded with a cyan
-//                          outline, animated from the simulation's state.
+//   createHunterFigure()   the hunter: Morrison's VRoid character with his own
+//                          textures, toon-shaded, animated from the simulation's
+//                          state (docs/arena-assets.md).
 //   createCapsuleFigure()  M1's capsule. Used if the model fails to load.
 //
 // Both return { object, place(pos, yaw), update(fighterState, dt), kind }.
@@ -30,14 +30,8 @@ function blobTexture(edge) {
   g.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = g
   ctx.fillRect(0, 0, size, size)
-  // A faint contact ring: a black shadow alone vanishes on the dark floor, and
-  // this is what shows you are in the air (it shrinks and fades as you rise).
-  const c = new THREE.Color(edge)
-  ctx.strokeStyle = `rgba(${(c.r * 255) | 0},${(c.g * 255) | 0},${(c.b * 255) | 0},0.5)`
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.arc(size / 2, size / 2, size * 0.36, 0, Math.PI * 2)
-  ctx.stroke()
+  // (No coloured contact ring any more: the lit floor shows the shadow fine.)
+  void edge
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
   return tex
@@ -113,9 +107,9 @@ export function createCapsuleFigure({ edge = '#22d3ee' } = {}) {
 
 // --- the hunter --------------------------------------------------------------
 // Morrison's VRoid hunter, rigged and animated on Mixamo, converted into one
-// file (see docs/arena-assets.md). The export carries no textures yet, so each
-// part is coloured by its material name: a dark coat, dark hair, and eyes that
-// glow (the bloom pass picks them up). The dummy gets the same body in crimson.
+// file with the VRoid textures put back (see docs/arena-assets.md). The textures
+// are drawn with toon shading; the dummy gets the same body tinted crimson. The
+// palettes below are only the fallback for a part without a texture.
 
 export const PALETTES = {
   hero: {
@@ -155,28 +149,15 @@ function partLook(name, pal) {
   return { color: pal.coat }
 }
 
-// Three light bands instead of smooth shading: the anime look.
+// Light bands instead of smooth shading: the anime look. Soft, so the textures'
+// own painted shading still reads.
 function toonRamp() {
-  const data = new Uint8Array([70, 70, 70, 255, 150, 150, 150, 255, 255, 255, 255, 255])
+  const data = new Uint8Array([165, 165, 170, 255, 215, 215, 218, 255, 255, 255, 255, 255])
   const tex = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat)
   tex.minFilter = tex.magFilter = THREE.NearestFilter
   tex.generateMipmaps = false
   tex.needsUpdate = true
   return tex
-}
-
-// The outline: the same mesh again, drawn inside-out and pushed out along its
-// normals, so only a rim shows round the body. Works for skinned meshes because
-// the push happens before skinning, in the model's own space.
-function outlineMaterial(color, width) {
-  const mat = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide })
-  mat.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <begin_vertex>',
-      `#include <begin_vertex>\n  transformed += normalize(normal) * ${width.toFixed(4)};`,
-    )
-  }
-  return mat
 }
 
 // --- animation ----------------------------------------------------------------
@@ -272,8 +253,8 @@ export function overrideClip(p, ctx = {}) {
     case 'getup':
       return [CLIPS.fallLand, 0.7 + 0.3 * clamp01(1 - p.timer / COMBAT.getupFrames)]
     case 'dash':
-      // The tumbling middle of the roll, played over the dash.
-      return [CLIPS.roll, 0.4 + 0.34 * clamp01((COMBAT.dashFrames - p.timer) / COMBAT.dashFrames)]
+      // The whole roll, from the dive to back on his feet, over the dash.
+      return [CLIPS.roll, 0.3 + 0.62 * clamp01((COMBAT.dashFrames - p.timer) / COMBAT.dashFrames)]
     case 'emote':
       return [CLIPS.emote, 'loop']
   }
@@ -294,7 +275,7 @@ export function loadHunterAsset(url = HUNTER_URL) {
   return new GLTFLoader().loadAsync(url)
 }
 
-// edge = outline colour, palette = 'hero' | 'enemy'.
+// edge = the capsule fallback's colour, palette = 'hero' | 'enemy'.
 export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } = {}) {
   const pal = PALETTES[palette] ?? PALETTES.hero
   const model = cloneSkinned(gltf.scene)
@@ -306,53 +287,39 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
   model.scale.setScalar(scale)
   model.position.y = -box.min.y * scale
 
-  // Toon materials by part, plus the outline.
+  // Toon materials: the VRoid texture where there is one, else a colour by part.
+  // The dummy is the same hunter, tinted crimson, with red eyes.
   const ramp = toonRamp()
-  const OUTLINE_M = 0.006 // outline thickness in metres
+  const tint = new THREE.Color(palette === 'enemy' ? '#ff9a9a' : '#ffffff')
   const made = []
-  const shells = []
-  model.updateMatrixWorld(true)
   model.traverse((o) => {
     if (!o.isMesh) return
-    // The file stores vertices in compressed units (quantized), so "1.2 cm" has
-    // to be converted into each mesh's own units: compare its size in its own
-    // space with its size in the world.
-    o.geometry.computeBoundingBox()
-    const own = o.geometry.boundingBox.getSize(new THREE.Vector3()).length()
-    const world = new THREE.Box3().setFromObject(o, true).getSize(new THREE.Vector3()).length()
-    const outline = outlineMaterial(
-      new THREE.Color(edge).multiplyScalar(0.6), // softer than the trim: less bloom
-      (OUTLINE_M * own) / (world || 1),
-    )
-    made.push(outline)
     const toon = (src) => {
-      const look = partLook(src.name ?? '', pal)
+      const name = src.name ?? ''
+      const look = partLook(name, pal)
+      const eye = /EyeIris/.test(name)
       const m = new THREE.MeshToonMaterial({
-        name: src.name,
-        color: new THREE.Color(look.color),
-        // A little self-light so the body reads in the dark room; eyes glow.
-        emissive: new THREE.Color(look.color).multiplyScalar(look.glow ?? 0.18),
+        name,
+        map: src.map ?? null,
+        color: src.map
+          ? eye && palette === 'enemy'
+            ? new THREE.Color('#ff6070')
+            : tint
+          : new THREE.Color(look.color),
+        emissive: eye ? new THREE.Color(pal.eye).multiplyScalar(0.6) : new THREE.Color(0x000000),
+        emissiveMap: eye ? (src.map ?? null) : null,
         gradientMap: ramp,
+        transparent: src.transparent,
+        alphaTest: src.alphaTest,
+        side: src.side,
+        depthWrite: src.depthWrite,
       })
       made.push(m)
       return m
     }
     o.material = Array.isArray(o.material) ? o.material.map(toon) : toon(o.material)
     o.frustumCulled = false // skinned bounds don't follow the animation
-    const shell = o.isSkinnedMesh
-      ? new THREE.SkinnedMesh(o.geometry, outline)
-      : new THREE.Mesh(o.geometry, outline)
-    if (o.isSkinnedMesh) shell.bind(o.skeleton, o.bindMatrix)
-    shell.frustumCulled = false
-    shell.name = `${o.name}-outline`
-    shells.push([o, shell])
   })
-  for (const [o, shell] of shells) {
-    shell.position.copy(o.position)
-    shell.quaternion.copy(o.quaternion)
-    shell.scale.copy(o.scale)
-    o.parent.add(shell)
-  }
 
   const root = new THREE.Group()
   root.name = 'fighter'
