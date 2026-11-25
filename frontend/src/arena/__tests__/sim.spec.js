@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import room from '@/arena/rooms/training-hall'
-import { createSimulation } from '@/arena/sim'
+import { createSimulation, stickToWorld } from '@/arena/sim'
 import { FOOT_OFFSET, MOVE, TURN_COS, TURN_RATE, TURN_SIN } from '@/arena/player'
 import { roomBoxes } from '@/arena/physics'
 import { createFixedStep, stepsFor, STEP_MS, STEP_S } from '@/arena/loop'
@@ -151,6 +151,31 @@ describe('walking and falling', () => {
     const v = sim.state().player.vel
     expect(Math.hypot(v.x, v.z)).toBeCloseTo(MOVE.walkSpeed, 5)
     sim.dispose()
+  })
+})
+
+describe('the stick follows the camera', () => {
+  it('default camera (looking -z): forward is -z, right is +x', () => {
+    expect(stickToWorld({ x: 0, y: 1 })).toEqual({ x: 0, z: -1 })
+    expect(stickToWorld({ x: 1, y: 0 })).toEqual({ x: 1, z: 0 })
+  })
+
+  it('camera looking +x: forward is +x, right is +z', () => {
+    expect(stickToWorld({ x: 0, y: 1 }, { x: 1, z: 0 })).toEqual({ x: 1, z: 0 })
+    const right = stickToWorld({ x: 1, y: 0 }, { x: 1, z: 0 })
+    expect(right.x).toBeCloseTo(0, 12)
+    expect(right.z).toBe(1)
+  })
+
+  it('walking forward goes where the camera looks', () => {
+    const sim = createSimulation(room)
+    run(sim, 1000)
+    const p0 = sim.state().player.pos
+    sim.setInput({ y: 1, view: { x: 1, z: 0 } })
+    run(sim, 1000)
+    const p1 = sim.state().player.pos
+    expect(p1.x - p0.x).toBeGreaterThan(4)
+    expect(Math.abs(p1.z - p0.z)).toBeLessThan(0.05)
   })
 })
 

@@ -43,7 +43,7 @@ export const TURN_RATE = 14
 export const TURN_COS = 0.97290106208145066
 export const TURN_SIN = 0.23122180563429856
 
-const SHAPE = { radius: MOVE.radius, half: FOOT_OFFSET }
+export const SHAPE = { radius: MOVE.radius, half: FOOT_OFFSET }
 const SPRINT_MIN2 = MOVE.walkSpeed * 1.05 * (MOVE.walkSpeed * 1.05)
 
 function approach(current, target, maxDelta) {
@@ -93,7 +93,12 @@ export function createPlayer(world, spawn) {
   //   move   wish direction in world space, each axis -1..1
   //   sprint held
   //   jumpHeld / jumpPressed   the button, and whether it went down this step
-  function update(dt, { move, sprint = false, jumpHeld = false, jumpPressed = false }) {
+  //   face   optional unit vector {x, z}: turn towards it instead of towards the
+  //          movement (combat uses it to face the opponent while blocking)
+  function update(
+    dt,
+    { move, sprint = false, jumpHeld = false, jumpPressed = false, face = null },
+  ) {
     let mx = move.x
     let mz = move.z
     const len2 = mx * mx + mz * mz
@@ -198,8 +203,11 @@ export function createPlayer(world, spawn) {
     s.sprinting = sprint && s.grounded && speed2 > SPRINT_MIN2
 
     // Face where we are going; when hugging a wall, face the wall.
-    if (s.wall) turnTowards(s.facing, -s.wall.x, -s.wall.z)
-    else if (speed2 > 0.25) {
+    if (face) turnTowards(s.facing, face.x, face.z)
+    else if (s.wall) turnTowards(s.facing, -s.wall.x, -s.wall.z)
+    else if (speed2 > 0.25 && mx * mx + mz * mz > 0.01) {
+      // Only while steering: sliding (knockback, the end of a dash) with no
+      // direction held keeps you facing where you were.
       const sp = Math.sqrt(m.x * m.x + m.z * m.z)
       turnTowards(s.facing, m.x / sp, m.z / sp)
     }

@@ -138,7 +138,9 @@ M1 stays done. Then:
   sprint / jump / wall hug + wall jump, the KayKit hunter with animations, Rapier replaced by
   our own deterministic sim with snapshot/restore. (Not in the original plan: Morrison asked for
   the movement and model first.)
-- **M2b — The fighter kit vs a dummy.** Own fixed-point sim replaces Rapier (the M1 tests
+- **M2b — The fighter kit vs a dummy. (DONE 25 Nov)** Plus an AI training dummy on the same
+  kit that wanders, attacks, blocks and dashes, and a 3/4 fight camera.
+- *(original M2b text:)* **The fighter kit vs a dummy.** Own fixed-point sim replaces Rapier (the M1 tests
   carry over), two fighters facing each other, walk / sidestep / backdash, Light / Heavy / Block,
   the 1- and 3-hit strings with frame data, hitstop/stun/knockdown. A capsule-shaped fighter
   is fine; the opponent is a training dummy that blocks or stands on a toggle.

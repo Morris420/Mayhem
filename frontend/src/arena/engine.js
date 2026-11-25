@@ -18,28 +18,45 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import defaultRoom from './rooms/training-hall.js'
 import { buildRoomScene } from './world.js'
 import { createSimulation } from './sim.js'
-import { createCapsuleFigure, createHunterFigure, setShadowBlocks } from './figure.js'
+import {
+  createCapsuleFigure,
+  createHunterFigure,
+  loadHunterAsset,
+  setShadowBlocks,
+} from './figure.js'
+import { createEffects } from './effects.js'
 import { createKeyboard } from './input.js'
 import { createFixedStep, stepsFor, STEP_S } from './loop.js'
 
-// The locked third-person camera: behind and above the player, looking at the
-// chest. Orbit-with-mouse is an open question (playbook §9).
+// The camera. Exploring: fixed, behind and above the player, looking towards -z.
+// In a fight (an opponent within framingRange): it eases round to a three-quarter
+// view of the line between the two fighters, so they never hide each other, and
+// looks at the middle of the fight. The stick is always relative to the camera.
+// Set fightAngle to 0 for a camera that stays straight behind the fight.
 export const CAMERA = {
-  distance: 7.5,
-  height: 4.2,
+  distance: 8,
+  height: 4.4,
   lookHeight: 0.8,
   fov: 55,
   wallMargin: 1.8, // keep the camera this far from walls: close neon strips glare
   belowTop: 1.2, // and this far below the top of the walls
   followY: 6, // how quickly the camera follows a jump (1/s); lower = calmer
+  framing: 0.5, // how far towards a nearby opponent the camera looks (0 = not at all)
+  framingRange: 12, // ...when they are within this many metres
+  fightAngle: 50, // degrees off the fight line the camera looks from (90 = Tekken side view)
+  fightDistance: 7, // metres from the middle of the fight
+  fightEase: 2.5, // how quickly the camera swings in and out (1/s)
 }
 
 // Bloom: subtle. Raise `strength` for more glow, lower `threshold` to make more
 // of the room glow.
 export const BLOOM = { strength: 0.55, radius: 0.45, threshold: 0.22 }
 
+// The dummy's look: red outline, reddish body.
+const DUMMY_TINT = [0.95, 0.7, 0.72]
+
 // How often the Vue HUD is told about the game. Vue never runs inside the frame loop.
-const HUD_INTERVAL_MS = 200
+const HUD_INTERVAL_MS = 100
 
 // Every geometry, material and texture under `root`.
 function disposeTree(root) {
@@ -55,7 +72,7 @@ function disposeTree(root) {
 
 export async function createArena(
   container,
-  { room = defaultRoom, test = false, seed = 1, onHud = () => {} } = {},
+  { room = defaultRoom, test = false, seed = 1, dummy = 'auto', onHud = () => {} } = {},
 ) {
   // --- renderer -------------------------------------------------------------
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
@@ -75,22 +92,36 @@ export async function createArena(
   // --- scene ----------------------------------------------------------------
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(room.colors.background)
-  scene.fog = new THREE.FogExp2(room.colors.background, 0.03)
+  scene.fog = new THREE.FogExp2(room.colors.background, 0.025)
   const roomScene = buildRoomScene(room)
   scene.add(roomScene)
+  const effects = createEffects(scene)
 
+  // --- simulation -----------------------------------------------------------
+  const sim = createSimulation(room, { seed, dummy })
+  const keyboard = test ? null : createKeyboard(window)
+  const clock = createFixedStep()
+
+  // --- fighters' looks: one model, a clone per fighter -------------------------
   setShadowBlocks(room.blocks)
-  let figure
+  let gltf = null
   try {
-    figure = await createHunterFigure({ edge: room.colors.trim })
+    gltf = await loadHunterAsset()
   } catch (e) {
     // The game still works without the model: fall back to M1's capsule.
-    console.warn('[arena] hunter model failed to load, using the capsule', e)
-    figure = createCapsuleFigure({ edge: room.colors.trim })
+    console.warn('[arena] hunter model failed to load, using capsules', e)
   }
-  scene.add(figure.object)
+  const figures = sim.fighters.map((f) => {
+    const isDummy = f.id === 'dummy'
+    const edge = isDummy ? room.colors.enemy : room.colors.trim
+    const fig = gltf
+      ? createHunterFigure(gltf, isDummy ? { edge, tint: DUMMY_TINT } : { edge })
+      : createCapsuleFigure({ edge })
+    scene.add(fig.object)
+    return fig
+  })
 
-  const camera = new THREE.PerspectiveCamera(CAMERA.fov, 1, 0.1, 120)
+  const camera = new THREE.PerspectiveCamera(CAMERA.fov, 1, 0.1, 140)
 
   // Post-processing. The composer renders into its own target, which has no
   // anti-aliasing unless asked for: without `samples`, every thin bright edge
@@ -121,28 +152,37 @@ export async function createArena(
   resizeObserver.observe(container)
   resize()
 
-  // --- simulation -----------------------------------------------------------
-  const sim = createSimulation(room, { seed })
-  const keyboard = test ? null : createKeyboard(window)
-  const clock = createFixedStep()
-
-  // Positions at the previous and current step, so rendering can interpolate
-  // between them when the monitor's refresh rate is not exactly 60 Hz.
+  // Positions at the previous and current step, per fighter, so rendering can
+  // interpolate between them when the monitor is not exactly 60 Hz.
   const yawOf = (f) => Math.atan2(f.x, f.z)
-  const prev = { ...sim.player.state.pos, yaw: yawOf(sim.player.state.facing) }
-  const curr = { ...prev }
+  const read = (f) => ({ ...f.body.state.pos, yaw: yawOf(f.body.state.facing) })
+  const prev = sim.fighters.map(read)
+  const curr = sim.fighters.map(read)
   function remember(into) {
-    const p = sim.player.state
-    into.x = p.pos.x
-    into.y = p.pos.y
-    into.z = p.pos.z
-    into.yaw = yawOf(p.facing)
+    sim.fighters.forEach((f, i) => Object.assign(into[i], read(f)))
   }
 
+  // Events since the last frame (several steps can run per frame).
+  let pending = []
+  // The last combo the player landed, timed in simulation ticks so it behaves
+  // the same in real time and under a test.
+  let combo = { n: 0, tick: -Infinity }
+  const COMBO_SHOW_TICKS = 84 // 1.4 s
   function stepOnce() {
     remember(prev)
     sim.step()
     remember(curr)
+    const ev = sim.state().events
+    if (ev.length) {
+      pending.push(...ev)
+      for (const e of ev) {
+        if (e.attacker === 'player' && e.combo >= 2) combo = { n: e.combo, tick: e.tick }
+      }
+    }
+  }
+  function flushEvents() {
+    for (const e of pending) effects.spawn(e)
+    pending = []
   }
 
   // --- camera ---------------------------------------------------------------
@@ -150,33 +190,79 @@ export async function createArena(
   const lerpAngle = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t
   const inner = { x: room.width / 2 - CAMERA.wallMargin, z: room.depth / 2 - CAMERA.wallMargin }
   let camY = null // smoothed height the camera follows
+  let engaged = 0 // 0 = exploring, 1 = fighting someone close (eased)
+  const camDir = { x: 0, z: -1 } // the camera's horizontal look direction (eased)
+  const FA = (CAMERA.fightAngle * Math.PI) / 180
+  const rot = (v, a) => ({
+    x: v.x * Math.cos(a) - v.z * Math.sin(a),
+    z: v.x * Math.sin(a) + v.z * Math.cos(a),
+  })
+  let elapsed = 0
 
-  // dt: real seconds since the last frame, for the render-only smoothing and the
-  // animations. 0 = snap (tests, first frame).
+  // dt: real seconds since the last frame, for render-only smoothing and effects.
+  // 0 = snap (tests, first frame).
   function draw(alpha, dt) {
-    const pos = {
-      x: prev.x + (curr.x - prev.x) * alpha,
-      y: prev.y + (curr.y - prev.y) * alpha,
-      z: prev.z + (curr.z - prev.z) * alpha,
-    }
-    figure.place(pos, lerpAngle(prev.yaw, curr.yaw, alpha))
-    figure.update(sim.player.state, dt)
+    const pos = sim.fighters.map((_, i) => ({
+      x: prev[i].x + (curr[i].x - prev[i].x) * alpha,
+      y: prev[i].y + (curr[i].y - prev[i].y) * alpha,
+      z: prev[i].z + (curr[i].z - prev[i].z) * alpha,
+    }))
+    figures.forEach((fig, i) => fig.place(pos[i], lerpAngle(prev[i].yaw, curr[i].yaw, alpha)))
+    effects.update(dt)
+    elapsed += dt
 
-    // Follow jumps smoothly: the camera eases to the new height instead of
-    // bobbing with every hop.
+    const me = pos[0]
     camY =
-      camY === null || dt === 0 ? pos.y : camY + (pos.y - camY) * Math.min(1, dt * CAMERA.followY)
-    look.set(pos.x, camY + CAMERA.lookHeight, pos.z)
-    // Locked follow, kept inside the walls: with the player backed against the
-    // near wall the camera moves in closer instead of ending up outside the room.
+      camY === null || dt === 0 ? me.y : camY + (me.y - camY) * Math.min(1, dt * CAMERA.followY)
+    // How much we are in a fight, and the direction to view it from.
+    let near = 0
+    let want = { x: 0, z: -1 }
+    let fx = 0
+    let fz = 0
+    if (pos[1]) {
+      fx = pos[1].x - me.x
+      fz = pos[1].z - me.z
+      const d = Math.sqrt(fx * fx + fz * fz)
+      near = Math.min(1, Math.max(0, (CAMERA.framingRange - d) / 4))
+      if (d > 1e-3) {
+        // Three-quarter view: the fight line turned by fightAngle, to whichever
+        // side the camera already is, so it never flips across.
+        const axis = { x: fx / d, z: fz / d }
+        const a = rot(axis, FA)
+        const b = rot(axis, -FA)
+        const fight = a.x * camDir.x + a.z * camDir.z >= b.x * camDir.x + b.z * camDir.z ? a : b
+        want = { x: want.x + (fight.x - want.x) * near, z: want.z + (fight.z - want.z) * near }
+      }
+    }
+    const k = dt === 0 ? 1 : Math.min(1, dt * CAMERA.fightEase)
+    engaged = dt === 0 ? near : engaged + (near - engaged) * k
+    camDir.x += (want.x - camDir.x) * k
+    camDir.z += (want.z - camDir.z) * k
+    const cl = Math.sqrt(camDir.x * camDir.x + camDir.z * camDir.z) || 1
+    camDir.x /= cl
+    camDir.z /= cl
+
+    // Look at the player, or the middle of the fight.
+    const lx = me.x + fx * CAMERA.framing * engaged
+    const lz = me.z + fz * CAMERA.framing * engaged
+    look.set(lx, camY + CAMERA.lookHeight, lz)
+    const dist = CAMERA.distance + (CAMERA.fightDistance - CAMERA.distance) * engaged
+    const shake = effects.shakeOffset(elapsed)
+    // Kept inside the walls and below their top: close neon strips glare.
     camera.position.set(
-      Math.max(-inner.x, Math.min(inner.x, pos.x)),
-      Math.min(camY + CAMERA.height, room.wallHeight - CAMERA.belowTop),
-      Math.max(-inner.z, Math.min(inner.z, pos.z + CAMERA.distance)),
+      Math.max(-inner.x, Math.min(inner.x, lx - camDir.x * dist)) + shake.x,
+      Math.min(camY + CAMERA.height, room.wallHeight - CAMERA.belowTop) + shake.y,
+      Math.max(-inner.z, Math.min(inner.z, lz - camDir.z * dist)),
     )
     camera.lookAt(look)
     renderer.info.reset()
     composer.render()
+  }
+
+  function animate(dt) {
+    const st = sim.state()
+    figures[0].update(st.player, dt)
+    if (figures[1] && st.dummy) figures[1].update(st.dummy, dt)
   }
 
   // --- HUD ------------------------------------------------------------------
@@ -184,7 +270,8 @@ export async function createArena(
   function pushHud(now, force = false) {
     if (!force && now - lastHud < HUD_INTERVAL_MS) return
     lastHud = now
-    onHud(sim.state())
+    const st = sim.state()
+    onHud({ ...st, combo: st.tick - combo.tick < COMBO_SHOW_TICKS ? combo.n : 0 })
   }
 
   // --- loop -----------------------------------------------------------------
@@ -205,31 +292,37 @@ export async function createArena(
       const steps = clock.advance(delta)
       // Read the keys only when the simulation will actually step, so a quick
       // tap on a fast monitor (frames with no step) is not read and lost.
-      if (steps > 0) sim.setInput(keyboard.controls())
+      if (steps > 0) sim.setInput({ ...keyboard.controls(), view: { ...camDir } })
       for (let i = 0; i < steps; i++) stepOnce()
+      flushEvents()
+      animate(delta / 1000)
       roomScene.userData.update(now / 1000)
       draw(clock.alpha(), delta / 1000)
     }
     pushHud(now)
   }
   raf = requestAnimationFrame(frame)
+  animate(STEP_S)
   draw(1, 0)
   pushHud(performance.now(), true)
 
   // --- test hook --------------------------------------------------------------
   // Exposed as window.__arena by ArenaView when the page is opened with ?test=1.
   // Shape agreed in arena-playbook §2.
-  const FUTURE_ACTIONS = ['attack', 'dodge', 'block']
+  const BUTTONS = ['jump', 'light', 'heavy', 'dash']
   const testHook = {
     ready: true,
-    figure: figure.kind,
+    figure: figures[0].kind,
     // Advance exactly round(ms / 16.67) fixed steps, draw, and return the state.
-    // Animations advance step by step too, so a screenshot shows the right pose.
+    // Animations and effects advance step by step too, so a screenshot shows
+    // the right pose.
     step(ms) {
       const n = stepsFor(ms)
       for (let i = 0; i < n; i++) {
         stepOnce()
-        figure.update(sim.player.state, STEP_S)
+        flushEvents()
+        animate(STEP_S)
+        effects.update(STEP_S)
       }
       roomScene.userData.update(sim.state().time)
       draw(1, 0)
@@ -237,28 +330,39 @@ export async function createArena(
       return sim.state()
     },
     state: () => sim.state(),
-    // Controls, held until changed: { x, y, sprint, jump } (x = right, y = forward,
-    // each -1..1; only the fields given change). 'jump' = one full jump.
-    // 'stop' = let go of everything. Combat actions arrive with the fighter kit.
+    // Controls, held until changed: { x, y, sprint, jump, light, heavy, block, dash }
+    // (x = right, y = forward, each -1..1; only the fields given change).
+    // A button name ('jump', 'light', 'heavy', 'dash') = one tap on the next step.
+    // 'stop' = let go of everything.
     input(action) {
       if (action === 'stop') {
-        sim.setInput({ x: 0, y: 0, sprint: false, jump: false })
+        sim.setInput({
+          x: 0,
+          y: 0,
+          sprint: false,
+          jump: false,
+          light: false,
+          heavy: false,
+          block: false,
+          dash: false,
+        })
         return { accepted: true }
       }
-      if (action === 'jump') {
-        sim.press('jump')
+      if (BUTTONS.includes(action)) {
+        sim.press(action)
         return { accepted: true }
       }
       if (action && typeof action === 'object') {
         sim.setInput(action)
         return { accepted: true }
       }
-      if (FUTURE_ACTIONS.includes(action) || String(action).startsWith('ability:')) {
-        return { accepted: false, reason: 'combat actions arrive with the fighter kit' }
+      if (String(action).startsWith('ability:')) {
+        return { accepted: false, reason: 'abilities arrive with the stats' }
       }
       throw new Error(`Unknown arena input: ${JSON.stringify(action)}`)
     },
     seed: (n) => sim.seed(n),
+    dummy: (mode) => sim.setDummyMode(mode),
     snapshot: () => sim.snapshot(),
     restore(snap) {
       sim.restore(snap)
@@ -267,9 +371,10 @@ export async function createArena(
       draw(1, 0)
       return sim.state()
     },
-    // Place the player anywhere (e.g. high up, to test falling). Clears velocity.
-    teleport(pos) {
-      sim.teleport(pos)
+    // Place the player (or the dummy) anywhere. Clears velocity.
+    teleport(pos, who = 'player') {
+      if (who === 'dummy') sim.teleportDummy(pos)
+      else sim.teleport(pos)
       remember(prev)
       remember(curr)
       draw(1, 0)
@@ -298,10 +403,12 @@ export async function createArena(
       return { width: w, height: h, lit: lit / total, cyan: cyan / total }
     },
     // Rendering numbers for the performance budget (playbook §6), and which
-    // animation clip the hunter is playing.
+    // animation clip each fighter is showing.
     debug: () => ({
-      figure: figure.kind,
-      clip: figure.current?.() ?? null,
+      figure: figures[0].kind,
+      clip: figures[0].current?.() ?? null,
+      dummyClip: figures[1]?.current?.() ?? null,
+      sparks: effects.count(),
       drawCalls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
       geometries: renderer.info.memory.geometries,
@@ -317,7 +424,8 @@ export async function createArena(
     cancelAnimationFrame(raf)
     resizeObserver.disconnect()
     keyboard?.dispose()
-    figure.dispose?.()
+    for (const fig of figures) fig.dispose?.()
+    effects.dispose()
     disposeTree(scene)
     bloom.dispose()
     composer.dispose()

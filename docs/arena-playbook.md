@@ -79,6 +79,10 @@ exactly N health" instead of squinting at a picture — and the screenshots beco
 rather than the only check. Build this in M1, not later; retrofitting determinism into a
 finished game loop is miserable.
 
+Since M2b also: buttons as taps (`input('light' | 'heavy' | 'dash' | 'jump')`) or held
+(`input({ block: true })`), `dummy('auto' | 'idle' | 'block' | 'attack')`, `teleport(pos, 'dummy')`,
+`snapshot()` / `restore()`, and `state().events` (this step's hits and blocks).
+
 Built in M1 exactly like this, plus `teleport(pos)`, `pixels()` (reads back a rendered frame:
 share of lit and of neon-cyan pixels) and `debug()` (draw calls, triangles). In test mode
 nothing advances on its own and the keyboard is ignored; `step(ms)` runs `round(ms / 16.67)`
@@ -148,6 +152,10 @@ frontend/src/arena/
   world.js      roomBoxes() -> colliders AND meshes from the same list; lights, fog, trim
   figure.js     what fighters look like: the glTF hunter + animation picking; capsule fallback
   player.js     movement rules and feel (MOVE constants): walk, sprint, jump, wall hug/jump
+  moves.js      the move list as frame data (MOVES) + everything else combat (COMBAT)    [M2b]
+  combat.js     fighters: body + combat state machine, hits, block, dash, pushboxes     [M2b]
+  ai.js         the training dummy's brain: produces the same controls a player does    [M2b]
+  effects.js    hit sparks and camera shake (render-only, driven by sim events)        [M2b]
   boss.js       the boss: stat block, AI state machine, telegraphs, hitboxes
   combat.js     damage, cooldowns, stamina, hit resolution, the fight result
   hud/          Vue components for bars, cooldowns, the result screen
@@ -297,6 +305,15 @@ looks flat without it.
 - **Neon close to the camera glares.** A trim strip a metre from the lens fills the screen and
   the bloom smears it. The camera keeps `wallMargin` from walls and stays `belowTop` under the
   top of the walls.
+- **Buffer attack presses.** Players press the next button exactly on impact — during the
+  hitstop freeze. Without a buffer those presses vanished and strings dropped their third hit.
+  `COMBAT.inputBuffer` (8 frames) remembers them; a browser test found this one.
+- **Combos are maths, not luck.** Every string link must land before the previous hit's hitstun
+  ends (`next hit frame ≤ startup + 1 + hitstun`). A unit test checks every link in `MOVES`, so a
+  tuning change that breaks a combo fails loudly.
+- **Behind-the-back cameras hide fights.** Two fighters a metre apart, seen from behind one of
+  them, overlap completely. The camera swings to a 3/4 view in a fight, and the stick is
+  relative to the camera (`input.view`, part of the recorded input so replays still match).
 - **Jumping onto ledges** (lessons from the Rapier version, still covered by tests): "grounded"
   must not be reported while rising, and only a downward-facing surface is a ceiling. Either
   mistake stops a jump dead halfway up a ledge.

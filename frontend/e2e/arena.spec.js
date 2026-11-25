@@ -29,6 +29,8 @@ test.afterEach(async ({ page }, info) => {
 async function openArena(page) {
   await page.goto('/arena?test=1')
   await page.waitForFunction(() => window.__arena?.ready === true, null, { timeout: 60_000 })
+  // The dummy wanders by default; most tests want it standing still.
+  await page.evaluate(() => window.__arena.dummy('idle'))
 }
 
 const step = (page, ms) => page.evaluate((ms) => window.__arena.step(ms), ms)
@@ -77,11 +79,11 @@ test('the capsule falls, walks and collides — through the test hook', async ({
   expect(z0 - s.player.pos.z).toBeGreaterThan(4.4)
   expect(z0 - s.player.pos.z).toBeLessThan(5.01)
 
-  // Holds left for five seconds: stops at the wall (inner face x = -16, radius 0.4).
+  // Holds left for six seconds: stops at the wall (inner face x = -22, radius 0.4).
   await input(page, { x: -1, y: 0 })
-  s = await step(page, 5000)
-  expect(s.player.pos.x).toBeGreaterThan(-15.6 - 0.001)
-  expect(s.player.pos.x).toBeLessThan(-15.5)
+  s = await step(page, 6000)
+  expect(s.player.pos.x).toBeGreaterThan(-21.6 - 0.001)
+  expect(s.player.pos.x).toBeLessThan(-21.5)
 
   // Teleport up high and drop again: falling works anywhere, not only at spawn.
   await input(page, 'stop')
@@ -91,9 +93,9 @@ test('the capsule falls, walks and collides — through the test hook', async ({
   expect(s.player.grounded).toBe(true)
 
   // Combat inputs are recognised but not live yet; garbage is rejected loudly.
-  expect(await input(page, 'attack')).toEqual({
+  expect(await input(page, 'ability:fire')).toEqual({
     accepted: false,
-    reason: 'combat actions arrive with the fighter kit',
+    reason: 'abilities arrive with the stats',
   })
   await expect(page.evaluate(() => window.__arena.input('jump-to-moon'))).rejects.toThrow(
     /Unknown arena input/,
@@ -126,7 +128,7 @@ test('sprint, jump and wall hug — and the hunter animates to match', async ({ 
   expect(s.player.grounded).toBe(true)
 
   // Wall hug: next to the left wall, jump while pushing into it.
-  await page.evaluate(() => window.__arena.teleport({ x: -14.5, y: 0.95, z: 6 }))
+  await page.evaluate(() => window.__arena.teleport({ x: -20.5, y: 0.95, z: 6 }))
   await step(page, 300)
   await input(page, { x: -1 })
   await input(page, 'jump')
@@ -231,12 +233,12 @@ test('real-time mode: no test hook, the clock runs, and the keyboard walks', asy
   await expect(page.getByText('grounded')).toBeVisible()
   const [, , z0] = await hudPos()
 
-  await page.keyboard.down('KeyW')
+  await page.keyboard.down('KeyS') // backwards, away from the dummy
   await page.waitForTimeout(1200)
-  await page.keyboard.up('KeyW')
+  await page.keyboard.up('KeyS')
   await page.waitForTimeout(400) // HUD refreshes 5x a second
   const [, , z1] = await hudPos()
-  expect(z0 - z1).toBeGreaterThan(1) // moved forward (-z) in real time
+  expect(z1 - z0).toBeGreaterThan(1) // moved back (+z) in real time
 
   // Space jumps: the HUD reads "airborne" for a moment.
   await page.keyboard.down('Space')
@@ -244,32 +246,85 @@ test('real-time mode: no test hook, the clock runs, and the keyboard walks', asy
   await page.keyboard.up('Space')
 })
 
-test('screenshots: running, jumping onto a ledge, hugging a wall', async ({ page }) => {
+test('the fight: J J J combos the dummy, the HUD shows it, the dummy fights back', async ({
+  page,
+}) => {
   await openArena(page)
-  // Land, then run towards the staircase so the hunter is mid-stride.
-  await step(page, 1000)
-  await input(page, { x: -0.5, y: 1 })
-  await step(page, 1100)
-  await page.screenshot({ path: `${SHOTS}arena-m2-run.png` })
+  await page.evaluate(() => window.__arena.teleport({ x: 0, y: 0.95, z: 3 }))
+  await step(page, 300)
+  const events = []
+  const tap = async (b, ms) => {
+    await input(page, b)
+    const s = await step(page, ms)
+    events.push(...s.events)
+    return s
+  }
+  // Light, Light, Light, each pressed while the previous hit is under way.
+  for (let i = 0; i < 3; i++) {
+    await input(page, 'light')
+    for (let k = 0; k < 10; k++) events.push(...(await step(page, 17)).events)
+  }
+  await tap('stop', 1)
+  // The combo counter is on screen while the string lands.
+  await expect(page.getByTestId('combo')).toHaveText(/[23] HITS/)
+  for (let k = 0; k < 40; k++) events.push(...(await step(page, 17)).events)
+  const hits = events.filter((e) => e.type === 'hit').map((e) => e.move)
+  expect(hits).toEqual(['L1', 'L2', 'L3'])
+  let s = await page.evaluate(() => window.__arena.state())
+  expect(s.dummy.hp).toBe(79)
+  await expect(page.getByTestId('hp-dummy')).toHaveAttribute('style', /width: 79%/)
 
-  // Jump from the floor onto the low ledge (back-left).
-  await page.evaluate(() => window.__arena.teleport({ x: -9.5, y: 0.95, z: -3 }))
-  await input(page, { x: -1, y: 0.4 })
+  // Let the dummy fight: within ten seconds of standing next to it, it hits you.
+  await page.evaluate(() => window.__arena.dummy('auto'))
+  s = await step(page, 10000)
+  expect(s.player.hp).toBeLessThan(100)
+})
+
+test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({ page }) => {
+  await openArena(page)
+  // A heavy blow landing on the dummy, frozen in the hitstop.
+  await page.evaluate(() => window.__arena.teleport({ x: 0.4, y: 0.95, z: 3.4 }))
+  await step(page, 300)
+  await input(page, 'heavy')
+  let s
+  for (let i = 0; i < 40; i++) {
+    s = await step(page, 17)
+    if (s.events.length) break
+  }
+  expect(s.events[0]?.type).toBe('hit')
+  await page.screenshot({ path: `${SHOTS}arena-m3-hit.png` })
+
+  // The dummy blocking a jab.
+  await step(page, 1200)
+  await page.evaluate(() => window.__arena.dummy('block'))
+  await step(page, 400)
+  await input(page, 'light')
+  await step(page, 150)
+  await page.screenshot({ path: `${SHOTS}arena-m3-block.png` })
+
+  // Running across the hall.
+  await page.evaluate(() => window.__arena.dummy('idle'))
+  await page.evaluate(() => window.__arena.teleport({ x: 6, y: 0.95, z: 12 }))
+  await input(page, { x: -0.5, y: 1, sprint: true })
+  await step(page, 900)
+  await page.screenshot({ path: `${SHOTS}arena-m3-run.png` })
+
+  // Jump onto the low ledge (back-left).
+  await page.evaluate(() => window.__arena.teleport({ x: -14, y: 0.95, z: -8 }))
+  await input(page, { x: -1, y: 0, sprint: false })
   await step(page, 200)
   await input(page, 'jump')
   await step(page, 330)
-  const s = await page.evaluate(() => window.__arena.state())
-  expect(s.player.grounded).toBe(false)
-  await page.screenshot({ path: `${SHOTS}arena-m2-jump.png` })
+  await page.screenshot({ path: `${SHOTS}arena-m3-jump.png` })
 
   // Cling to the right-hand wall.
-  await page.evaluate(() => window.__arena.teleport({ x: 14.5, y: 0.95, z: -6 }))
+  await page.evaluate(() => window.__arena.teleport({ x: 20.5, y: 0.95, z: -6 }))
   await input(page, { x: 1, y: 0 })
   await step(page, 300)
   await input(page, 'jump')
   await step(page, 700)
   expect((await page.evaluate(() => window.__arena.state())).player.wall).not.toBeNull()
-  await page.screenshot({ path: `${SHOTS}arena-m2-wall.png` })
+  await page.screenshot({ path: `${SHOTS}arena-m3-wall.png` })
 })
 
 test.describe('phone (390 px)', () => {
@@ -285,7 +340,7 @@ test.describe('phone (390 px)', () => {
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       )
       expect(overflow).toBeLessThanOrEqual(0)
-      if (path.startsWith('/arena')) await page.screenshot({ path: `${SHOTS}arena-m2-phone.png` })
+      if (path.startsWith('/arena')) await page.screenshot({ path: `${SHOTS}arena-m3-phone.png` })
     })
   }
 })

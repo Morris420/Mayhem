@@ -1,6 +1,6 @@
-// The headless simulation: the room's collision boxes and the player, advanced in
-// fixed steps. No three.js, no DOM, no physics library, so the same code runs in
-// the browser (wrapped by engine.js), in unit tests under Node, and later in a
+// The headless simulation: the room's collision boxes and the fighters, advanced
+// in fixed steps. No three.js, no DOM, no physics library, so the same code runs
+// in the browser (wrapped by engine.js), in unit tests under Node, and later in a
 // Node verifier on the server.
 //
 // Everything that decides what happens lives here and only moves on step(). The
@@ -8,12 +8,12 @@
 // state, on every machine: that is what online rollback play is built on
 // (arena-design.md §0), and snapshot()/restore() are its save and load.
 import { createCollisionWorld } from './physics.js'
-import { createPlayer } from './player.js'
+import { createFighter, resolveHits, separate, stepFighter } from './combat.js'
+import { createBrain, think } from './ai.js'
 import { STEP_S } from './loop.js'
 
 // Small seeded PRNG (mulberry32). Integer maths only, so identical everywhere.
-// Nothing uses it yet; it exists so the boss draws from the server's seed
-// instead of Math.random().
+// The dummy's brain draws from it, so a fight replays identically.
 export function createRng(seed) {
   const rng = {
     a: seed >>> 0,
@@ -28,42 +28,89 @@ export function createRng(seed) {
   return rng
 }
 
-// The camera is locked behind the player looking towards -z, so "stick forward"
-// means world -z and "stick right" means world +x. When the camera can orbit this
-// is the one function that changes.
-export function stickToWorld(stick) {
-  return { x: stick.x, z: -stick.y }
+// The stick is relative to the camera: "forward" is the way the camera looks.
+// `view` is the camera's horizontal direction as a unit vector, sent with the
+// input (so it is part of the recorded, deterministic input stream, like the
+// stick itself). Default: looking towards -z, the fixed exploring camera.
+export function stickToWorld(stick, view = { x: 0, z: -1 }) {
+  // right = forward turned 90° clockwise seen from above: (-z, x)
+  return {
+    x: stick.x * -view.z + stick.y * view.x,
+    z: stick.x * view.x + stick.y * view.z,
+  }
 }
 
+const BUTTONS = ['jump', 'light', 'heavy', 'block', 'dash']
 const clone = (o) => JSON.parse(JSON.stringify(o))
 
-export function createSimulation(room, { seed = 1 } = {}) {
+// options.dummy: 'auto' | 'idle' | 'block' | 'attack' | 'none' (no dummy at all)
+export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
   const world = createCollisionWorld(room)
-  const player = createPlayer(world, room.spawn)
+  const fighters = [
+    createFighter(world, { id: 'player', spawn: room.spawn, facing: { x: 0, z: -1 } }),
+  ]
+  if (dummy !== 'none' && room.dummySpawn) {
+    fighters.push(
+      createFighter(world, { id: 'dummy', spawn: room.dummySpawn, facing: { x: 0, z: 1 } }),
+    )
+  }
+  const [hero] = fighters
+  const brain = createBrain(dummy === 'none' ? 'idle' : dummy)
 
   let tick = 0
   let currentSeed = seed
   let rng = createRng(seed)
-  // The controls, held until changed. Stick: x = right, y = forward, each -1..1.
-  const input = { x: 0, y: 0, sprint: false, jump: false }
-  let jumpWasHeld = false
-  let queuedJump = false // a press from press('jump')...
-  let pressHolding = false // ...which then counts as held until the jump peaks
+  const random = () => rng.next()
+  // The player's controls, held until changed. Stick: x = right, y = forward.
+  const input = {
+    x: 0,
+    y: 0,
+    sprint: false,
+    jump: false,
+    light: false,
+    heavy: false,
+    block: false,
+    dash: false,
+    view: { x: 0, z: -1 }, // the camera direction the stick is relative to
+  }
+  const wasHeld = { jump: false, light: false, heavy: false, dash: false }
+  const queued = { jump: false, light: false, heavy: false, dash: false } // press() taps
+  let pressHolding = false // a press('jump') counts as held until the jump peaks
+  let events = []
+
+  function heroControls() {
+    const pressed = {}
+    for (const b of ['jump', 'light', 'heavy', 'dash']) {
+      pressed[b] = (input[b] && !wasHeld[b]) || queued[b]
+      wasHeld[b] = input[b]
+    }
+    if (queued.jump) pressHolding = true
+    for (const b in queued) queued[b] = false
+    const move = stickToWorld(input, input.view)
+    return {
+      mx: move.x,
+      mz: move.z,
+      sprint: input.sprint,
+      jump: input.jump || pressHolding,
+      jumpPressed: pressed.jump,
+      lightPressed: pressed.light,
+      heavyPressed: pressed.heavy,
+      block: input.block,
+      dashPressed: pressed.dash,
+    }
+  }
 
   function step() {
-    // The press is detected here, inside the step, so it is part of the
-    // deterministic input stream and never depends on when a key event arrived.
-    const jumpPressed = (input.jump && !jumpWasHeld) || queuedJump
-    jumpWasHeld = input.jump
-    if (queuedJump) pressHolding = true
-    queuedJump = false
-    player.update(STEP_S, {
-      move: stickToWorld(input),
-      sprint: input.sprint,
-      jumpHeld: input.jump || pressHolding,
-      jumpPressed,
-    })
-    if (pressHolding && player.state.vel.y <= 0 && !player.state.fromJump) pressHolding = false
+    // Everyone decides from the same moment, then everyone moves, then hits land.
+    const controls = fighters.map((f) =>
+      f === hero ? heroControls() : think(brain, f, hero, random),
+    )
+    fighters.forEach((f, i) => stepFighter(f, controls[i], fighters, STEP_S))
+    if (pressHolding && hero.body.state.vel.y <= 0 && !hero.body.state.fromJump)
+      pressHolding = false
+    separate(world, fighters)
+    events = resolveHits(fighters)
+    for (const e of events) e.tick = tick
     tick++
   }
 
@@ -74,47 +121,66 @@ export function createSimulation(room, { seed = 1 } = {}) {
     input.y = clampAxis(y)
   }
 
-  // Partial update: only the fields given change. { x, y, sprint, jump }
+  // Partial update: only the fields given change.
+  // { x, y, sprint, jump, light, heavy, block, dash }
   function setInput(next = {}) {
+    if (next.view) {
+      const l = Math.sqrt(next.view.x * next.view.x + next.view.z * next.view.z)
+      if (l > 1e-6) input.view = { x: next.view.x / l, z: next.view.z / l }
+    }
     if ('x' in next) input.x = clampAxis(next.x)
     if ('y' in next) input.y = clampAxis(next.y)
     if ('sprint' in next) input.sprint = !!next.sprint
-    if ('jump' in next) input.jump = !!next.jump
+    for (const b of BUTTONS) if (b in next) input[b] = !!next[b]
   }
 
-  // A full jump in one call (tests, the boss AI later): pressed now and treated
-  // as held until the jump peaks. For a short hop, hold jump via setInput and
-  // release it early instead.
+  // A tap of one button on the next step: 'jump' | 'light' | 'heavy' | 'dash'.
+  // A tapped jump is a full jump (held until it peaks); for a short hop, hold
+  // jump via setInput and release it early instead.
   function press(button) {
-    if (button !== 'jump') throw new Error(`Unknown button: ${button}`)
-    queuedJump = true
+    if (!(button in queued)) throw new Error(`Unknown button: ${button}`)
+    queued[button] = true
+  }
+
+  function fighterState(f) {
+    const p = f.body.state
+    const c = f.c
+    return {
+      pos: { ...p.pos },
+      vel: { ...p.vel },
+      grounded: p.grounded,
+      sprinting: p.sprinting,
+      wall: p.wall ? { ...p.wall } : null,
+      jumps: p.jumps,
+      lastJump: p.lastJump,
+      facing: { ...p.facing },
+      // For the renderer and humans. Derived with atan2, so not part of the
+      // deterministic state: compare `facing`, never `yaw`, across machines.
+      yaw: Math.atan2(p.facing.x, p.facing.z),
+      hp: c.hp,
+      maxHp: c.maxHp,
+      combat: c.state,
+      timer: c.timer,
+      move: c.move,
+      moveFrame: c.moveFrame,
+      moveCount: c.moveCount,
+      hitstop: c.hitstop,
+      invuln: c.invuln,
+      juggle: c.juggle,
+    }
   }
 
   // A plain-object snapshot, safe to JSON and compare in a test.
   function state() {
-    const p = player.state
     return {
       tick,
       time: tick * STEP_S,
       seed: currentSeed,
-      phase: 'explore', // the fight adds 'fight', 'won', 'lost'
+      phase: 'training', // a real fight adds 'fight', 'won', 'lost'
       input: { ...input },
-      player: {
-        pos: { ...p.pos },
-        vel: { ...p.vel },
-        grounded: p.grounded,
-        sprinting: p.sprinting,
-        wall: p.wall ? { ...p.wall } : null,
-        jumps: p.jumps,
-        lastJump: p.lastJump,
-        facing: { ...p.facing },
-        // For the renderer and humans. Derived with atan2, so not part of the
-        // deterministic state: compare `facing`, never `yaw`, across machines.
-        yaw: Math.atan2(p.facing.x, p.facing.z),
-        hp: null, // from /api/arena/loadout, later
-        stamina: null,
-      },
-      boss: null,
+      player: fighterState(hero),
+      dummy: fighters[1] ? { ...fighterState(fighters[1]), mode: brain.mode } : null,
+      events: events.map((e) => ({ ...e })),
     }
   }
 
@@ -125,10 +191,11 @@ export function createSimulation(room, { seed = 1 } = {}) {
       seed: currentSeed,
       rng: rng.a,
       input,
-      jumpWasHeld,
-      queuedJump,
+      wasHeld,
+      queued,
       pressHolding,
-      player: player.state,
+      brain,
+      fighters: fighters.map((f) => ({ body: f.body.state, c: f.c })),
     })
   }
 
@@ -139,10 +206,15 @@ export function createSimulation(room, { seed = 1 } = {}) {
     rng = createRng(0)
     rng.a = s.rng
     Object.assign(input, s.input)
-    jumpWasHeld = s.jumpWasHeld
-    queuedJump = s.queuedJump
+    Object.assign(wasHeld, s.wasHeld)
+    Object.assign(queued, s.queued)
     pressHolding = s.pressHolding
-    Object.assign(player.state, s.player)
+    Object.assign(brain, s.brain)
+    s.fighters.forEach((saved, i) => {
+      Object.assign(fighters[i].body.state, saved.body)
+      Object.assign(fighters[i].c, saved.c)
+    })
+    events = []
   }
 
   return {
@@ -153,15 +225,24 @@ export function createSimulation(room, { seed = 1 } = {}) {
     state,
     snapshot,
     restore,
-    teleport: (pos) => player.teleport(pos),
+    teleport: (pos) => hero.body.teleport(pos),
+    teleportDummy: (pos) => fighters[1]?.body.teleport(pos),
+    setDummyMode(mode) {
+      if (!['auto', 'idle', 'block', 'attack'].includes(mode))
+        throw new Error(`Unknown mode: ${mode}`)
+      brain.mode = mode
+      brain.blockFor = 0
+      brain.string = 0
+    },
     seed(n) {
       currentSeed = n >>> 0
       rng = createRng(currentSeed)
     },
-    random: () => rng.next(),
-    player,
+    random,
+    fighters,
+    player: hero.body, // the player's body (kept for the renderer and older tests)
     room,
     world,
-    dispose() {}, // nothing to free any more: plain JS objects
+    dispose() {}, // nothing to free: plain JS objects
   }
 }
