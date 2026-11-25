@@ -80,6 +80,23 @@ These are what make the rest possible. Every milestone keeps them.
 
 ## 4. The milestones, in order
 
+**Morrison's order (25 Nov, agreed):**
+1. **A** — the character: VRoid → Blender (VRM add-on) → FBX → Mixamo auto-rig, so the model
+   is on Mixamo's skeleton and every Mixamo clip fits with no retargeting. Start with idle,
+   run and a punch to judge the look; then the full clip list below.
+2. **Combat + camera** — a real combo and attack system on the fighter kit (B's tuning plus
+   new moves and strings) and better camera controls. Feel first, before effects, because
+   effects attach to moves.
+3. **Looks** — VFX and particles for the finished moves, arena polish.
+4. **C** — stats from the System's skills (+ abilities). That makes the **playable build**;
+   then D (boss, fight flow) and E (rewards).
+5. **F** — netcode: LAN 1v1, then online, then free-for-all. **G** controllers last.
+
+Note for A with the Mixamo-rig route: the model arrives as FBX on the `mixamorig` skeleton.
+Convert model + clips once, offline, to one `.glb` (FBX2glTF or Blender's glTF export), keep
+the raw Mixamo files out of the repo, and map the clip names in `figure.js`. `@pixiv/three-vrm`
+is then not needed; recreate the toon look and outline in `figure.js` as now.
+
 Each has what to build and what "done" means.
 
 ### A. The real hunter (VRoid + Mixamo)
