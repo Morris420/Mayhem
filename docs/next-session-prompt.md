@@ -20,9 +20,14 @@ Read these in the repo, in this order:
 and collides, on a deterministic fixed-step loop driven by tests through `window.__arena`.
 The browser harness now lives in the repo (`cd frontend && npm run test:e2e`).
 
-**Today: M2 from the design doc** — the neon hunter replaces the capsule (in `figure.js`), with
-idle / run / attack / hit / death states and the camera behaving during each. Body proportions
-from the physique stage come in M3 with the real stats; in M2 use a fixed mid build.
+**Direction change.** Since M1 I want the arena to be a 3D Tekken-style fighter in an anime
+look: blocks, simple 1/3-hit combos, unlockable abilities like a fire spell, and a fast, light
+network layer so I can later challenge other hunters online (and maybe a LAN arena with several
+hunters). Inspiration: RUSH proto (alcratz.itch.io/rush-proto). Your write-up of what that means
+is `docs/arena-design.md` §0.
+
+**Today:** first go through the four decisions at the end of §0 with me (short, with your
+recommendation). Then build the new M2 as decided.
 
 Work the way the playbook says: take the whole milestone, run the unit tests, `php artisan test`
 and the browser suite, show me a screenshot, commit and push, update `docs/roadmap.md`. Ask me
