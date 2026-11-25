@@ -11,7 +11,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
-import { FOOT_OFFSET, MOVE } from './player.js'
+import { FOOT_OFFSET, MOVE, SIZE } from './player.js'
 import { COMBAT, MOVES } from './moves.js'
 import { ABILITIES } from './abilities.js'
 
@@ -190,7 +190,7 @@ export const MOVE_CLIPS = {
 export const IMPACT = { Jab: 0.37, Straight: 0.39, Uppercut: 0.51, Cross: 0.42, BodyBlow: 0.24 }
 // How fast the clips travel at playback speed 1 (from their root motion), so the
 // feet match the ground speed and never slide.
-const STRIDE = { walk: 1.75, run: 4.6 } // m/s
+const STRIDE = { walk: 1.75 * SIZE, run: 4.6 * SIZE } // m/s: longer legs, longer strides
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
 
@@ -220,6 +220,20 @@ function attackProgress(m, frame, impact) {
 // ctx: { landing (s left), sinceDouble (s since a double jump), near (bool) }
 const CAST_CLIP = 'Straight'
 const CAST_IMPACT = 0.39
+
+// The dash flip, as fractions of the dash: when the tuck starts, when the spin is
+// complete and the landing starts.
+export const ROLL = { tuckFrom: 0.1, landFrom: 0.72 }
+const dashProgress = (p) => clamp01((COMBAT.dashFrames - p.timer) / COMBAT.dashFrames)
+const smooth = (x) => x * x * (3 - 2 * x)
+// How far round the flip is, in radians (0 outside a dash).
+export function rollSpin(p) {
+  if (p.combat !== 'dash') return 0
+  const q = dashProgress(p)
+  return (
+    2 * Math.PI * smooth(clamp01((q - ROLL.tuckFrom * 0.5) / (ROLL.landFrom - ROLL.tuckFrom * 0.5)))
+  )
+}
 
 export function overrideClip(p, ctx = {}) {
   switch (p.combat) {
@@ -252,9 +266,14 @@ export function overrideClip(p, ctx = {}) {
       return [CLIPS.hitHead, clamp01((COMBAT.knockdownFrames - p.timer) / 30)]
     case 'getup':
       return [CLIPS.fallLand, 0.7 + 0.3 * clamp01(1 - p.timer / COMBAT.getupFrames)]
-    case 'dash':
-      // The whole roll, from the dive to back on his feet, over the dash.
-      return [CLIPS.roll, 0.3 + 0.62 * clamp01((COMBAT.dashFrames - p.timer) / COMBAT.dashFrames)]
+    case 'dash': {
+      // A forward flip: crouch, tuck (the body spins, see rollSpin), land. Built
+      // from the jump clips because Mixamo's ground roll sinks into the floor.
+      const q = dashProgress(p)
+      if (q < ROLL.tuckFrom) return [CLIPS.jump, 0.25 + 0.15 * (q / ROLL.tuckFrom)]
+      if (q < ROLL.landFrom) return [CLIPS.jump, 0.4]
+      return [CLIPS.fallLand, 0.35 + 0.5 * clamp01((q - ROLL.landFrom) / (1 - ROLL.landFrom))]
+    }
     case 'emote':
       return [CLIPS.emote, 'loop']
   }
@@ -324,7 +343,12 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
   const root = new THREE.Group()
   root.name = 'fighter'
   const body = new THREE.Group() // turns with the fighter
-  body.add(model)
+  // The flip pivots round the waist, not the feet.
+  const spin = new THREE.Group()
+  spin.position.y = FOOT_OFFSET
+  model.position.y -= FOOT_OFFSET
+  spin.add(model)
+  body.add(spin)
   root.add(body)
   const shadow = createShadow(edge)
   root.add(shadow.mesh)
@@ -375,7 +399,10 @@ export function createHunterFigure(gltf, { edge = '#22d3ee', palette = 'hero' } 
     const speed = Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z)
 
     // Rolling: the body turns to roll the way the dash goes (render only).
-    yawOverride = p.combat === 'dash' && speed > 0.5 ? Math.atan2(p.vel.x, p.vel.z) : null
+    // Kept through the landing, when the roll has braked to a near stop.
+    if (p.combat !== 'dash') yawOverride = null
+    else if (speed > 0.5) yawOverride = Math.atan2(p.vel.x, p.vel.z)
+    spin.rotation.x = rollSpin(p)
 
     // Override (attack, block, hit, dash, air...) fades in quickly.
     const o = overrideClip(p, { landing, sinceDouble, near: ctx.near })

@@ -42,7 +42,7 @@ const room = {
   // The player starts in the air on purpose: the first thing M1 proved is gravity.
   spawn: { x: 0, y: 2.5, z: 10 },
   // The training dummy starts in the centre ring, facing the player.
-  dummySpawn: { x: 0, y: 0.95, z: 2 },
+  dummySpawn: { x: 0, y: 1.2, z: 2 },
 
   // The kit file and the pieces taken from it (filled in at the bottom).
   kit: '/models/arena/dungeon-kit.glb',

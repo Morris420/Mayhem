@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import room from '@/arena/rooms/training-hall'
 import { createSimulation } from '@/arena/sim'
-import { FOOT_OFFSET, MOVE } from '@/arena/player'
+import { FOOT_OFFSET, MOVE, SIZE } from '@/arena/player'
 import { COMBAT, MOVES } from '@/arena/moves'
 import { stepsFor } from '@/arena/loop'
 
@@ -58,12 +58,12 @@ describe('hits', () => {
   })
 
   it('a jab out of range misses; the heavy reaches further', () => {
-    let sim = face(2.3)
+    let sim = face(2.3 * SIZE) // distances scale with the hunter
     sim.press('light')
     expect(run(sim, 600)).toHaveLength(0)
     expect(sim.state().dummy.hp).toBe(COMBAT.maxHp)
 
-    sim = face(2.3)
+    sim = face(2.3 * SIZE)
     sim.press('heavy')
     const ev = run(sim, 800)
     expect(ev.map((e) => e.move)).toEqual(['H'])

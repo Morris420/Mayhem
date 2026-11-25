@@ -1,3 +1,4 @@
+import { SIZE } from './player.js'
 // The move list: every attack as a row of frame data, like a fighting game's
 // frame data sheet. 60 frames = 1 second. Tune the feel here; nothing else needs
 // to change.
@@ -128,6 +129,13 @@ export const MOVES = {
 
 // Total length of a move in frames.
 export const moveFrames = (m) => m.startup + m.active + m.recovery
+
+// Reach grows with the hunter (SIZE in player.js), so a bigger body still lands
+// its punches where the fist visibly is.
+for (const m of Object.values(MOVES)) {
+  m.range *= SIZE
+  m.radius *= SIZE
+}
 
 // Everything about a fighter that is not an attack, also in frames.
 export const COMBAT = {

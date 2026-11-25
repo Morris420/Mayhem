@@ -77,11 +77,11 @@ test('the capsule falls, walks and collides — through the test hook', async ({
   expect(z0 - s.player.pos.z).toBeGreaterThan(4.4)
   expect(z0 - s.player.pos.z).toBeLessThan(5.01)
 
-  // Holds left for six seconds: stops at the wall (inner face x = -22, radius 0.4).
+  // Holds left for six seconds: stops at the wall (inner face x = -22, radius 0.5).
   await input(page, { x: -1, y: 0 })
   s = await step(page, 6000)
-  expect(s.player.pos.x).toBeGreaterThan(-21.6 - 0.001)
-  expect(s.player.pos.x).toBeLessThan(-21.5)
+  expect(s.player.pos.x).toBeGreaterThan(-21.5 - 0.001)
+  expect(s.player.pos.x).toBeLessThan(-21.4)
 
   // Teleport up high and drop again: falling works anywhere, not only at spawn.
   await input(page, 'stop')

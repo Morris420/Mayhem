@@ -11,9 +11,13 @@ import { moveBody } from './physics.js'
 
 // Movement feel. Not combat balance (that will live on the server in ArenaRules),
 // just how the body handles. Change a number, run the arena, feel the difference.
+// How big a hunter is. 1 = 1.8 m tall; Morrison asked for 25% bigger (25 Nov), so
+// 2.25 m. The body, the model and every reach scale with it.
+export const SIZE = 1.25
+
 export const MOVE = {
-  radius: 0.4, // body radius, metres
-  halfHeight: 0.5, // kept from the capsule: total height = 2 * (halfHeight + radius) = 1.8 m
+  radius: 0.4 * SIZE, // body radius, metres
+  halfHeight: 0.5 * SIZE, // total height = 2 * (halfHeight + radius) = 1.8 m * SIZE
   walkSpeed: 5, // m/s at full stick
   sprintSpeed: 8.5, // m/s with sprint held
   accel: 40, // m/s² on the ground; high = snappy, low = icy

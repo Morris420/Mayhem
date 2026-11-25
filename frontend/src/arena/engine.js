@@ -36,7 +36,7 @@ import { createFixedStep, stepsFor, STEP_S } from './loop.js'
 // along its own line instead of being pinned, so it never sticks. The stick is
 // always relative to where the camera looks.
 export const CAMERA = {
-  distance: 8, // metres, horizontally, behind what it looks at
+  distance: 9, // metres, horizontally, behind what it looks at
   pitch: 0.38, // radians above horizontal (~22°)
   minPitch: -0.35, // a little below the player, looking up
   maxPitch: 1.35, // almost straight down
