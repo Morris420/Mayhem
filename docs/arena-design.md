@@ -11,19 +11,11 @@ added without a rewrite.
 
 ---
 
-## 1. One thing to do tonight (30 seconds)
+## 1. One thing to do tonight (30 seconds) — done
 
-**This container cannot install npm packages or reach the internet.** I checked: there is no
-`three`, no Babylon, and `npm install` fails with a network error. Whatever we pick, I cannot
-add it to the project in the current chat.
-
-In Claude's settings, turn on network access for package installs. Then **start tomorrow in a
-new chat** — the setting is picked up by a new chat, not by a running one. Point the new chat
-at this file and say "read docs/arena-design.md, let's do M0".
-
-If that setting cannot be changed, the fallback is: you run `npm install three @dimforge/rapier3d-compat`
-locally and push the lockfile, and I write code I cannot run. That costs us the screenshot-and-fix
-loop that has caught most of the bugs so far, so it is worth the 30 seconds.
+Network access was turned on and packages install (25 Nov). M0 was decided in the docs
+(three.js + Rapier, real-time, code-built figures) and **M1 is done** — see `docs/roadmap.md`
+and `docs/screenshots/arena-m1.png`.
 
 ---
 
@@ -187,7 +179,7 @@ screenshot, it is committed and pushed, and `docs/roadmap.md` is updated.
 
 - **M0 — Decide.** Engine, real-time vs turn-based, and whether the figures are code-built or
   Mixamo. Ten minutes, three answers.
-- **M1 — It moves.** `/arena` page, a dark room with neon trim, third-person camera, a capsule
+- **M1 — It moves. (DONE 25 Nov)** `/arena` page, a dark room with neon trim, third-person camera, a capsule
   that walks, falls, and collides with walls. Nothing else. This proves the whole stack and is
   the point where we find out if the engine choice was right.
 - **M2 — It looks like a hunter.** The neon figure replaces the capsule, with idle / run / attack

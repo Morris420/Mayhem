@@ -20,6 +20,8 @@ const router = createRouter({
         { path: 'briefcase', name: 'briefcase', component: () => import('@/views/BriefcaseView.vue') },
         { path: 'coach', name: 'coach', component: () => import('@/views/CoachView.vue') },
         { path: 'quests', name: 'quests', component: () => import('@/views/QuestBuilderView.vue') },
+        // three.js + Rapier only load when you open this page, never with the rest of the app.
+        { path: 'arena', name: 'arena', component: () => import('@/views/ArenaView.vue') },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

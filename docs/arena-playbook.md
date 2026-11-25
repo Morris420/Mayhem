@@ -29,17 +29,36 @@ Adobe login, so the files can only arrive through him; keep it as the V2 upgrade
 
 ## 2. Environment and how work gets verified
 
-**The container has no internet and cannot install npm packages.** Verified: `npm install` fails
-with a network error, and `/opt/npm-tools/node_modules` contains no 3D library. Before any arena
-code can be written, network access for package installs has to be enabled in Claude's settings
-**and a new chat started** — a running chat does not pick the setting up. Until then the only
-honest options are writing code I cannot run, or vendoring library files into the repo.
+**Packages install.** Since 25 Nov the container has network access for npm and Composer.
+`frontend/.npmrc` sets `legacy-peer-deps=true`, because `eslint-plugin-oxlint` 1.73 declares a
+peer of `oxlint` 1.73 while we run 1.74 — without it every `npm install` fails with ERESOLVE.
+Playwright's own browser download host is blocked in the container, so there the suite runs
+against the preinstalled Chromium via `PW_CHROMIUM_PATH` (see below).
 
-**How a milestone gets checked.** The project has a Playwright harness that builds the frontend
-with esbuild, boots `php -S` against SQLite plus a static server, runs an end-to-end script and
-writes screenshots. It lives outside the repo, in the session scratchpad, and it is how every
-feature so far has been verified. The arena must be testable the same way, which drives the
-single most important technical requirement in this document:
+**How a milestone gets checked.** The browser harness now lives **in the repo**
+(`frontend/playwright.config.js`, `frontend/e2e/`), so it cannot vanish with a session again:
+
+```bash
+cd frontend
+npx playwright install chromium      # once per machine
+npm run test:e2e                     # vite build + Playwright
+# in the Claude container:
+PW_CHROMIUM_PATH=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome npm run test:e2e
+```
+
+It builds the app, boots Laravel with `php -S` against a throwaway SQLite file
+(`e2e/backend.sh` — your MySQL is never touched), serves the build with `vite preview` (which
+proxies `/api` exactly like `npm run dev`), registers one hunter in `e2e/global-setup.js`, and
+drives real Chromium. Every test fails on a console error, an uncaught exception, a failed
+request or a 5xx. Screenshots land in `e2e/screenshots/` (git-ignored); the ones worth keeping
+are copied to `docs/screenshots/`.
+
+What it covers today: the arena (`e2e/arena.spec.js`) and the nav at six widths
+(`e2e/nav.spec.js`). **The old end-to-end suite for the System (register, quests, workout,
+food search, calendar sync, coach) was in the lost scratchpad and has not been rebuilt** —
+it is a good candidate for the wrap-up session, now that the harness exists.
+
+The single most important technical requirement in this document:
 
 > **The game loop must be steppable from the outside.** Not "render when the browser feels like
 > it" — a fixed timestep that a test can advance by hand.
@@ -61,9 +80,19 @@ exactly N health" instead of squinting at a picture — and the screenshots beco
 rather than the only check. Build this in M1, not later; retrofitting determinism into a
 finished game loop is miserable.
 
-**WebGL in headless Chromium** needs checking in M1. It generally works through SwiftShader, but
-it is slow and occasionally differs from a real GPU. If it fails, the fallback is to run the
-logic tests headless with a stubbed renderer and take screenshots in headed mode.
+Built in M1 exactly like this, plus `teleport(pos)`, `pixels()` (reads back a rendered frame:
+share of lit and of neon-cyan pixels) and `debug()` (draw calls, triangles). In test mode
+nothing advances on its own and the keyboard is ignored; `step(ms)` runs `round(ms / 16.67)`
+fixed steps. `input('attack')` answers `{accepted: false}` until M4.
+
+**WebGL in headless Chromium: verified working in M1** with
+`--use-angle=swiftshader --enable-unsafe-swiftshader`, bloom included. The pixel read-back
+test proves frames are really drawn, not just that a canvas exists.
+
+**The simulation also runs without a browser.** `src/arena/sim.js` has no three.js and no DOM,
+so Vitest runs it under Node (`src/arena/__tests__/sim.spec.js`): falls, walks, wall and
+pillar collisions, determinism. Prefer a unit test there for any rule; use the browser suite
+for what needs a real page.
 
 ---
 
@@ -99,10 +128,14 @@ it is what keeps the project readable by one person.
 
 ```
 frontend/src/arena/
-  engine.js     renderer, scene, camera, fixed-step loop, resize, dispose, the test hook
-  world.js      the room: floor, walls, lights, fog, neon trim. Data-driven so room #2 is a file
-  figure.js     the neon humanoid: skeleton, body proportions from skills, procedural animation
-  player.js     input, movement, the character controller, camera follow
+  engine.js     renderer, scene, camera follow, the rAF loop, resize, dispose, the test hook
+  sim.js        the headless simulation: Rapier world + room + player, step(), state(), seed  [M1]
+  loop.js       the fixed-step clock (1/60 s, frame delta clamped at 100 ms)                [M1]
+  input.js      keyboard -> stick (WASD / arrows); ignored in test mode                     [M1]
+  rooms/        one data file per arena (training-hall.js)                                  [M1]
+  world.js      roomBoxes() -> colliders AND meshes from the same list; lights, fog, trim
+  figure.js     what fighters look like. M1: a capsule; M2: the neon humanoid, same module
+  player.js     the kinematic character controller and movement feel (MOVE constants)
   boss.js       the boss: stat block, AI state machine, telegraphs, hitboxes
   combat.js     damage, cooldowns, stamina, hit resolution, the fight result
   hud/          Vue components for bars, cooldowns, the result screen
@@ -245,6 +278,23 @@ looks flat without it.
 - **The nav is nearly full on a phone** at seven items. Adding "Arena" makes eight — check the
   horizontal-overflow assertion at 390px, and if it fails, the labels are already hidden so the
   next lever is nav padding.
+- **Rapier's normal nudge factor.** With the default (`1e-4`) the character controller snags
+  on its own floor contact every ~13 steps and stops dead for a frame — 20% slower walking and
+  a visible stutter. `player.js` sets `setNormalNudgeFactor(0.01)`; a unit test measures the
+  walking distance, so this cannot silently come back.
+- **Bundle weight.** The arena chunk is ~4.9 MB (1.8 MB gzipped), loaded only on `/arena`.
+  three.js is ~150 KB of that gzipped; the rest is Rapier, whose wasm is 3 MB and which the
+  `-compat` build inlines as base64. Options are in `docs/roadmap.md` under "Arena: decisions
+  waiting". The design doc's "it loads" argument assumed far less than this.
+- **`php -S` for Laravel must start inside `public/`.** Laravel's `server.php` router finds
+  `index.php` from the working directory. `artisan serve` does this for you, but it also drops
+  most environment variables, which is why the e2e script uses `php -S` directly.
+- **Sanctum and non-browser clients.** A request is only treated as a session (cookies + CSRF)
+  when its `Origin`/`Referer` is a stateful domain. Playwright's API request context sends
+  neither by default, which gives a 500 "Session store not set on request".
+- **The nav already overflowed between 640 and 1024 px** before the arena existed; the eighth
+  link pushed 1280 px over too. Labels now show from 1280 px (xl) up, icons with tooltips and
+  aria-labels below that. `e2e/nav.spec.js` checks six widths.
 
 ---
 

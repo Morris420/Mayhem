@@ -22,6 +22,12 @@ export default defineConfig([
     },
   },
 
+  {
+    // The browser suite and its config run in Node, not the browser.
+    files: ['e2e/**', 'playwright.config.js'],
+    languageOptions: { globals: { ...globals.node } },
+  },
+
   js.configs.recommended,
   ...pluginVue.configs['flat/essential'],
 

@@ -3,7 +3,7 @@
 What every part of the application does, why it exists, and how the code behind it is put
 together. Written to be read straight through by someone who has never seen the repository.
 
-Last updated: 25 November 2026. If a detail here disagrees with the code, the code is right —
+Last updated: 25 November 2026 (arena M1). If a detail here disagrees with the code, the code is right —
 tell me and I will fix the document.
 
 ---
@@ -446,6 +446,23 @@ tier bars, and the physique figure linking to the gym.
 
 ---
 
+### 5.13 The arena (in progress)
+
+A 3D fighting game on its own page, where the nine skills become combat stats. Built with
+three.js (rendering) and Rapier (physics), loaded only when you open `/arena`. The plan is in
+`docs/arena-design.md`, the implementation brief in `docs/arena-playbook.md`.
+
+**M1, done:** a dark Training Hall with neon trim, a locked third-person camera, and a capsule
+you walk with WASD or the arrow keys, which falls and collides with the walls and pillars. The
+game runs on a fixed 1/60 s step in plain JavaScript (`src/arena/`), separate from Vue; the page
+only shows a small HUD the game updates five times a second. With `?test=1` nothing moves on its
+own and tests drive it step by step through `window.__arena`.
+
+*Code:* `ArenaView.vue`, `src/arena/` (`engine`, `sim`, `loop`, `world`, `player`, `figure`,
+`input`, `rooms/`).
+
+---
+
 ## 6. Cross-cutting concerns
 
 **Authorisation by relation.** Nearly every controller loads records through
@@ -472,17 +489,20 @@ That is the first thing to fix before other people use the app.*
 **Testing.** 111 backend tests cover each feature's behaviour, not its implementation: the quest
 lifecycle, scheduling edge cases, auto-achievements, nutrition, gym, Briefcase limits and
 permissions, Google sync against a faked Google, and the coach against a fake provider plus a
-faked Gemini to prove the request shape. There is also a browser suite (Playwright) that drives
-the real app end to end — register, create quests, log a workout, search food, sync a calendar,
-accept a coach quest — and checks for console errors, failed requests and horizontal overflow on
-a phone, with screenshots at each step. Frontend unit tests cover the API client and the chart.
+faked Gemini to prove the request shape. The browser suite (Playwright) lives in
+`frontend/e2e/` and runs with `npm run test:e2e`: it boots Laravel on a throwaway SQLite file,
+serves the built app, and fails on any console error, failed request or 5xx. Today it covers the
+arena and the nav at six widths; the earlier System walkthrough (register, quests, workout, food,
+calendar, coach) lived outside the repo and is still to be rebuilt there. Frontend unit tests
+cover the API client, the chart and the arena simulation.
 
 **Code conventions.** Models are thin and declare fillable fields with the PHP attribute
 `#[Fillable([...])]`. Logic lives in `app/Support`. Numbers that might be tuned live in a class
 of constants (`Progression`, `SkillCurve`, `DietRules`, `AchievementEngine`). Comments explain
 intent. Pint formats PHP; Prettier and ESLint handle the frontend. Icons are inline SVG paths in
-one component rather than an icon library, and charts are hand-drawn SVG — the frontend has
-exactly three runtime dependencies.
+one component rather than an icon library, and charts are hand-drawn SVG. The app itself has
+three runtime dependencies (Vue, Pinia, Vue Router); the arena adds three.js and Rapier, which
+only load on its page.
 
 ---
 
@@ -494,8 +514,7 @@ exactly three runtime dependencies.
   anything multiplayer.
 - **Per-user timezones**, a weekly report, JSON export, rest-day-aware streaks, and a PWA install
   — all queued for the wrap-up session.
-- **The arena combat game**, where the nine skills become combat stats. Planned in
-  `docs/arena-design.md`, with the implementation brief in `docs/arena-playbook.md`.
+- **The rest of the arena** (M2–M5: the hunter figure, real stats, the boss, rewards). See 5.13.
 
 ---
 

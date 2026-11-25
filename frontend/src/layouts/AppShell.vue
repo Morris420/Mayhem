@@ -21,6 +21,7 @@ const links = [
   { name: 'nutrition', label: 'Nutrition', icon: 'utensils' },
   { name: 'briefcase', label: 'Briefcase', icon: 'briefcase' },
   { name: 'coach', label: 'Coach', icon: 'sparkles' },
+  { name: 'arena', label: 'Arena', icon: 'swords' },
 ]
 
 async function logout() {
@@ -37,23 +38,25 @@ async function logout() {
   <div class="min-h-screen bg-[#0b0e14] text-slate-100">
     <header class="sticky top-0 z-20 border-b border-slate-800 bg-[#0b0e14]/90 backdrop-blur">
       <nav class="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-6">
-        <div class="flex min-w-0 items-center gap-0.5 sm:gap-2">
+        <div class="flex min-w-0 items-center gap-0.5 sm:gap-1">
           <span class="mr-1 text-base font-bold tracking-wide text-white sm:mr-4">Mayhem</span>
           <RouterLink
             v-for="l in links"
             :key="l.name"
             :to="{ name: l.name }"
-            class="flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-sm font-medium text-slate-400 sm:px-3 transition-colors hover:bg-slate-800 hover:text-slate-100"
+            :aria-label="l.label"
+            :title="l.label"
+            class="flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-sm font-medium text-slate-400 sm:px-2.5 transition-colors hover:bg-slate-800 hover:text-slate-100"
             active-class="!bg-slate-800 !text-white"
           >
             <AppIcon :name="l.icon" class="h-4 w-4" />
-            <span class="hidden sm:inline">{{ l.label }}</span>
+            <span class="hidden xl:inline">{{ l.label }}</span>
           </RouterLink>
         </div>
 
         <div class="flex items-center gap-3 text-sm">
-          <span class="hidden text-slate-400 sm:inline">{{ auth.user?.username }}</span>
-          <button type="button" class="flex items-center gap-2 rounded-lg border border-slate-700 px-2 py-1.5 text-slate-300 transition-colors sm:px-3 hover:border-slate-500 hover:text-white" @click="logout">
+          <span class="hidden text-slate-400 lg:inline">{{ auth.user?.username }}</span>
+          <button type="button" class="flex items-center gap-2 whitespace-nowrap rounded-lg border border-slate-700 px-2 py-1.5 text-slate-300 transition-colors sm:px-3 hover:border-slate-500 hover:text-white" @click="logout">
             <AppIcon name="log-out" class="h-4 w-4" /> <span class="hidden sm:inline">Log out</span>
           </button>
         </div>

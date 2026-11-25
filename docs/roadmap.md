@@ -43,12 +43,20 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
 - Weekly System report, daily reflection note in the day journal, JSON export/backup, rest-day-aware streaks, PWA install, polish.
 - Deployment decision (needed before Briefcase holds real finances and before PvP).
 
-## Next session: the arena combat game
-- Full plan, engine comparison, combat maths and milestones: docs/arena-design.md. Read it first.
-- Blocker: this container cannot install npm packages. Turn on network access for package installs and start a NEW chat.
-- Engine decided: three.js (+ Rapier). Real-time V1, code-built neon figures. See arena-playbook.md.
+## Arena: where we are
+- Engine decided: three.js + Rapier. Real-time V1, code-built neon figures. Plan: docs/arena-design.md; how-to: docs/arena-playbook.md.
+- **M1 - it moves: DONE (Nov 25).** `/arena` page (nav: "Arena"), dark Training Hall with neon trim and bloom, locked third-person camera, a capsule that falls, walks (WASD / arrows) and collides with walls and pillars. Screenshot: docs/screenshots/arena-m1.png.
+  - Deterministic fixed-step loop; `window.__arena` test hook with `?test=1` (step, state, input, seed, teleport, pixels, debug).
+  - The simulation (`src/arena/sim.js`) runs headless, so it has Node unit tests: 12 in `src/arena/__tests__/sim.spec.js`.
+  - Browser suite now lives in the repo: `cd frontend && npm run test:e2e` (14 tests: arena + nav at six widths). The old System e2e suite is not rebuilt yet.
+  - Leaving the page frees the WebGL context (tested: two visits, 0 contexts left).
+- **Next: M2 - it looks like a hunter.** Neon humanoid replaces the capsule in `figure.js`, idle / run / attack / hit / death states.
 
-## Later: arena combat game
+## Arena: decisions waiting for you
+- **Bundle weight.** The arena chunk is 4.9 MB (1.8 MB gzipped), only loaded on /arena and cached after the first visit. three.js is ~150 KB gzipped; the rest is Rapier (3 MB of wasm, inlined as base64 by the `-compat` build). Options: (a) accept it for V1 - it never touches the rest of the app; (b) switch to the non-compat Rapier build and load the .wasm as a separate file (~30% smaller, needs a Vite wasm plugin); (c) drop Rapier for our own capsule-vs-box collision - the arena is boxes and capsules, so it is feasible, but we lose the character controller. Recommendation: (a) now, revisit at M5 polish.
+- **Nav change (FYI, touches the System).** The nav already overlapped between 640 and 1024 px before the arena; adding the eighth link broke 1280 px too. Labels now show from 1280 px up; below that it is icons with tooltips. If you would rather keep labels on a laptop, the alternative is dropping the username from the header.
+
+## Later: arena combat game (original sketch, superseded by arena-design.md)
 - Combat stats computed server-side from skills (Strength attack, Stamina HP, Discipline defense, Intellect ability power, Faith healing/resist, Affection support, Fortune crit/loot, Craft gear).
 - Three.js arena, turn-based boss fights first, then PvP over WebSockets (Laravel Reverb).
 

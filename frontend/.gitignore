@@ -37,3 +37,8 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Playwright browser suite
+/e2e/.results/
+/e2e/.auth/
+/e2e/screenshots/
