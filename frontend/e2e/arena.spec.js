@@ -271,8 +271,8 @@ test('the fight: J J J combos the dummy, the HUD shows it, the dummy fights back
   const hits = events.filter((e) => e.type === 'hit').map((e) => e.move)
   expect(hits).toEqual(['L1', 'L2', 'L3'])
   let s = await page.evaluate(() => window.__arena.state())
-  expect(s.dummy.hp).toBe(79)
-  await expect(page.getByTestId('hp-dummy')).toHaveAttribute('style', /width: 79%/)
+  expect(s.dummy.hp).toBe(100 - 6 - 7 - 9) // jab, cross, uppercut
+  await expect(page.getByTestId('hp-dummy')).toHaveAttribute('style', /width: 78%/)
 
   // Let the dummy fight: within ten seconds of standing next to it, it hits you.
   await page.evaluate(() => window.__arena.dummy('auto'))
@@ -280,9 +280,40 @@ test('the fight: J J J combos the dummy, the HUD shows it, the dummy fights back
   expect(s.player.hp).toBeLessThan(100)
 })
 
+test('guard: a shield sphere while blocking, shrinking with the guard meter', async ({ page }) => {
+  await openArena(page)
+  await page.evaluate(() => window.__arena.teleport({ x: 0, y: 0.95, z: 3 }))
+  await step(page, 300)
+  await page.evaluate(() => window.__arena.dummy('block'))
+  await step(page, 300)
+  const size0 = (await page.evaluate(() => window.__arena.debug())).shield[1]
+  expect(size0).toBeGreaterThan(0.9) // full guard, full sphere
+  await input(page, 'heavy')
+  const s = await step(page, 900)
+  expect(s.dummy.guard).toBeLessThan(75)
+  const size1 = (await page.evaluate(() => window.__arena.debug())).shield[1]
+  expect(size1).toBeLessThan(size0 - 0.15)
+  await expect(page.getByTestId('guard-dummy')).toHaveAttribute('style', /width: (6\d|7[0-4])%/)
+  // Not blocking: no shield.
+  expect((await page.evaluate(() => window.__arena.debug())).shield[0]).toBe(0)
+})
+
+test('the stick follows the camera', async ({ page }) => {
+  await openArena(page)
+  await step(page, 1000)
+  // Turn the camera 90° left (looking towards -x): forward now walks towards -x.
+  await page.evaluate(() => window.__arena.camera({ yaw: 90 }))
+  const p0 = (await page.evaluate(() => window.__arena.state())).player.pos
+  await input(page, { y: 1 })
+  const p1 = (await step(page, 1000)).player.pos
+  expect(p0.x - p1.x).toBeGreaterThan(4)
+  expect(Math.abs(p1.z - p0.z)).toBeLessThan(0.1)
+})
+
 test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({ page }) => {
   await openArena(page)
-  // A heavy blow landing on the dummy, frozen in the hitstop.
+  // A heavy blow landing on the dummy, frozen in the hitstop, seen from the side.
+  await page.evaluate(() => window.__arena.camera({ yaw: -55, pitch: 18 }))
   await page.evaluate(() => window.__arena.teleport({ x: 0.4, y: 0.95, z: 3.4 }))
   await step(page, 300)
   await input(page, 'heavy')
@@ -292,7 +323,7 @@ test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({
     if (s.events.length) break
   }
   expect(s.events[0]?.type).toBe('hit')
-  await page.screenshot({ path: `${SHOTS}arena-m3-hit.png` })
+  await page.screenshot({ path: `${SHOTS}arena-m4-hit.png` })
 
   // The dummy blocking a jab.
   await step(page, 1200)
@@ -300,14 +331,15 @@ test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({
   await step(page, 400)
   await input(page, 'light')
   await step(page, 150)
-  await page.screenshot({ path: `${SHOTS}arena-m3-block.png` })
+  await page.screenshot({ path: `${SHOTS}arena-m4-block.png` })
+  await page.evaluate(() => window.__arena.camera({ yaw: 0 }))
 
   // Running across the hall.
   await page.evaluate(() => window.__arena.dummy('idle'))
   await page.evaluate(() => window.__arena.teleport({ x: 6, y: 0.95, z: 12 }))
   await input(page, { x: -0.5, y: 1, sprint: true })
   await step(page, 900)
-  await page.screenshot({ path: `${SHOTS}arena-m3-run.png` })
+  await page.screenshot({ path: `${SHOTS}arena-m4-run.png` })
 
   // Jump onto the low ledge (back-left).
   await page.evaluate(() => window.__arena.teleport({ x: -14, y: 0.95, z: -8 }))
@@ -315,7 +347,11 @@ test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({
   await step(page, 200)
   await input(page, 'jump')
   await step(page, 330)
-  await page.screenshot({ path: `${SHOTS}arena-m3-jump.png` })
+  await page.screenshot({ path: `${SHOTS}arena-m4-jump.png` })
+  // Double jump off the ledge.
+  await input(page, 'jump')
+  await step(page, 250)
+  expect((await page.evaluate(() => window.__arena.state())).player.lastJump).toBe('double')
 
   // Cling to the right-hand wall.
   await page.evaluate(() => window.__arena.teleport({ x: 20.5, y: 0.95, z: -6 }))
@@ -324,7 +360,7 @@ test('screenshots: a hit landing, running, a ledge jump, a wall cling', async ({
   await input(page, 'jump')
   await step(page, 700)
   expect((await page.evaluate(() => window.__arena.state())).player.wall).not.toBeNull()
-  await page.screenshot({ path: `${SHOTS}arena-m3-wall.png` })
+  await page.screenshot({ path: `${SHOTS}arena-m4-wall.png` })
 })
 
 test.describe('phone (390 px)', () => {
@@ -340,7 +376,7 @@ test.describe('phone (390 px)', () => {
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       )
       expect(overflow).toBeLessThanOrEqual(0)
-      if (path.startsWith('/arena')) await page.screenshot({ path: `${SHOTS}arena-m3-phone.png` })
+      if (path.startsWith('/arena')) await page.screenshot({ path: `${SHOTS}arena-m4-phone.png` })
     })
   }
 })

@@ -454,17 +454,19 @@ three.js (rendering) and our own deterministic physics, loaded only when you ope
 
 **Done so far (M1, M2, M2b):** a dark Training Hall with neon trim and ledges, and a hooded
 hunter (a CC0 model, placeholder) you move with WASD, sprint with Shift and jump with Space; in
-mid-air you can cling to a wall and kick off it. You fight with J (light), K (heavy), L (hold to
-block) and C (dash): 1- and 3-hit strings, knockdowns, hit freeze and sparks, against a
-training dummy that wanders, attacks, blocks and dashes on the same rules. The camera follows
-you while exploring and swings to a three-quarter view during a fight. The game runs on a fixed
+mid-air you can cling to a wall and kick off it. Space again in the air is a double jump. You look
+around with the mouse (click the arena to capture it) and fight with left click (light: jab,
+cross, uppercut), right click (heavy), F (hold to guard: a shield sphere that shrinks as the
+guard meter drains, and breaks at zero) and C (dash), against a training dummy that wanders,
+attacks, blocks and dashes on the same rules. The plan to finish it is
+`docs/arena-build-guide.md`. The game runs on a fixed
 1/60 s step in plain JavaScript (`src/arena/`) on our own deterministic physics, so the same
 inputs give the same result on every machine — the foundation for online fights. Vue only shows
 a small HUD the game updates five times a second. With `?test=1` nothing moves on its own and
 tests drive it step by step through `window.__arena`.
 
 *Code:* `ArenaView.vue`, `src/arena/` (`engine`, `sim`, `physics`, `player`, `moves`, `combat`,
-`ai`, `effects`, `loop`, `world`, `figure`, `input`, `rooms/`). Assets and licences: `docs/arena-assets.md`.
+`ai`, `effects`, `shield`, `loop`, `world`, `figure`, `input`, `rooms/`). Assets and licences: `docs/arena-assets.md`.
 
 ---
 

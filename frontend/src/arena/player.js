@@ -4,8 +4,9 @@
 // (needed for online play: arena-design.md §0).
 //
 // Moves: walk, sprint, jump (with coyote time, a jump buffer and a short hop when
-// you let go early), and wall hug: push into a wall in mid-air to cling and slide
-// down slowly, then jump to kick off it.
+// you let go early), a double jump (Space again in the air: a little higher, and
+// carries you the way you steer), and wall hug: push into a wall in mid-air to
+// cling and slide down slowly, then jump to kick off it, higher and away.
 import { moveBody } from './physics.js'
 
 // Movement feel. Not combat balance (that will live on the server in ArenaRules),
@@ -24,8 +25,10 @@ export const MOVE = {
   coyoteTime: 0.1, // s after walking off a ledge during which you can still jump
   jumpBuffer: 0.12, // s a jump press is remembered before landing
   wallSlideSpeed: 2.2, // m/s max fall while hugging a wall
-  wallJumpUp: 8.5, // m/s upwards when kicking off a wall
-  wallJumpPush: 6.5, // m/s away from the wall
+  doubleJumpSpeed: 9.8, // m/s upwards for the second jump: a little higher than the first
+  doubleJumpPush: 6, // m/s at least, in the direction you steer (or were moving)
+  wallJumpUp: 10.5, // m/s upwards when kicking off a wall: higher than a normal jump
+  wallJumpPush: 7.5, // m/s away from the wall
   wallGrace: 0.12, // s after leaving a wall during which a wall jump still works
   wallJumpLock: 0.2, // s after a wall jump during which the stick can't steer you back
   stepHeight: 0.3, // ledges this low are walked up without jumping
@@ -79,7 +82,8 @@ export function createPlayer(world, spawn) {
     facing: { x: 0, z: -1 }, // unit vector; -z = away from the camera
     wall: null, // { x, z } outward normal of the wall being hugged, or null
     jumps: 0, // counts every jump, so the renderer can tell a new one started
-    lastJump: null, // 'ground' | 'wall'
+    lastJump: null, // 'ground' | 'wall' | 'double'
+    airJumpUsed: false, // the double jump, used since leaving the ground
     // timers, in seconds
     coyote: 0,
     buffer: 0,
@@ -141,6 +145,29 @@ export function createPlayer(world, spawn) {
         s.lastJump = 'wall'
         s.wallGrace = 0
         s.wall = null
+        s.airJumpUsed = false // a wall jump gives you your double jump back
+        jumpedNow = true
+      } else if (!s.grounded && !s.airJumpUsed) {
+        // Double jump: up again, and off in the direction you steer; with no
+        // direction held, keep going the way you were moving.
+        s.vel.y = MOVE.doubleJumpSpeed
+        let dx = mx
+        let dz = mz
+        let d2 = dx * dx + dz * dz
+        if (d2 < 0.01) {
+          dx = s.vel.x
+          dz = s.vel.z
+          d2 = dx * dx + dz * dz
+        }
+        if (d2 > 0.01) {
+          const d = Math.sqrt(d2)
+          const cur = Math.sqrt(s.vel.x * s.vel.x + s.vel.z * s.vel.z)
+          const sp = Math.max(cur, MOVE.doubleJumpPush)
+          s.vel.x = (dx / d) * sp
+          s.vel.z = (dz / d) * sp
+        }
+        s.airJumpUsed = true
+        s.lastJump = 'double'
         jumpedNow = true
       }
       if (jumpedNow) {
@@ -190,7 +217,10 @@ export function createPlayer(world, spawn) {
     } else {
       s.wall = null
     }
-    if (s.grounded) s.lastWall = null
+    if (s.grounded) {
+      s.lastWall = null
+      s.airJumpUsed = false
+    }
 
     // A wall that stopped us also stops the velocity, so letting go of the key
     // next to a wall does not leave a stored-up push.
@@ -226,6 +256,7 @@ export function createPlayer(world, spawn) {
     s.lastWall = null
     s.coyote = s.buffer = s.wallGrace = s.lock = 0
     s.fromJump = false
+    s.airJumpUsed = false
   }
 
   return { state: s, update, teleport }

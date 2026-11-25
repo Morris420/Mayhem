@@ -61,11 +61,17 @@ Goal: finish and polish the System in 1-2 days of sessions, then build the arena
   - Camera: fixed behind you while exploring; when someone is within 12 m it eases to a 3/4 view of the fight so the fighters never hide each other, and WASD follows the camera. `CAMERA.fightAngle` in engine.js (0 = always straight behind).
   - HUD: health bars (you / the dummy), combo counter, the controls. Hit sparks and a camera shake on heavy hits.
   - Tests: 66 unit (34 for combat and the dummy, incl. a whole fight replayed after a rewind), 17 browser.
-- **Next:** the hunter model - Morrison is making it in VRoid Studio + Mixamo animations (docs/arena-assets.md); then VRM loading, Mixamo retargeting and swapping the clip names in `figure.js` (`LOCO`, `MOVE_CLIPS`). After that: stats and abilities from skills (server loadout), the boss, LAN 1v1.
+- **Polish round: DONE (25 Nov).** Screenshots: docs/screenshots/arena-m4-*.png.
+  - Double jump (Space again in the air: a bit higher, carries you the way you steer or were moving); wall jump launches higher (10.5 m/s) and further from the wall, and gives the double jump back.
+  - Combo: left jab -> right cross -> uppercut; the uppercut deals 1.5x the jab and launches.
+  - Controls: mouse look (click the arena to capture the mouse, Esc releases, wheel zooms), left click light, right click heavy, F (or L) guard, C dash; the stick follows the camera.
+  - Guard meter: blocking costs guard (per move), holding drains it slowly, it refills after a pause; at zero the guard breaks (stunned and open). A see-through shield sphere shows while guarding and shrinks with the meter; guard bars in the HUD.
+  - Tests: 75 unit, 19 browser.
+- **Next: the whole remaining plan is `docs/arena-build-guide.md`** (milestones A-G and the production checklist). Start a new chat with `docs/next-session-prompt.md`; work on the `arena` branch.
 
 ## Arena: decisions waiting for you
 - Nav change (FYI, touches the System): labels show from 1280 px up, icons below. Alternative: drop the username from the header instead.
-- The fight camera (3/4 view, WASD follows the camera) is my call to stop the fighters hiding each other; one constant to change if you prefer it fixed.
+- Mouse: right click = heavy and F = guard were my picks (you asked for left click = attack); easy to swap in `input.js`.
 - The hunter is a placeholder (KayKit, chibi). Your VRoid + Mixamo hunter replaces it.
 
 ## Later: arena combat game (original sketch, superseded by arena-design.md)

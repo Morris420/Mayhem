@@ -154,8 +154,8 @@ export const LOCO = {
 export const MOVE_CLIPS = {
   L1: 'Unarmed_Melee_Attack_Punch_A',
   L2: 'Unarmed_Melee_Attack_Punch_B',
-  L3: 'Unarmed_Melee_Attack_Kick',
-  LH: '1H_Melee_Attack_Slice_Diagonal',
+  L3: '1H_Melee_Attack_Slice_Diagonal', // closest to an uppercut in this pack; Mixamo has a real one
+  LH: 'Unarmed_Melee_Attack_Kick',
   H: '1H_Melee_Attack_Stab',
   AIR: 'Unarmed_Melee_Attack_Kick',
 }
@@ -196,6 +196,8 @@ export function overrideClip(p, landing) {
       return ['Blocking', 'loop']
     case 'blockstun':
       return ['Block_Hit', clamp01(1 - p.timer / 14)]
+    case 'guardbreak':
+      return ['Hit_B', clamp01(1 - p.timer / COMBAT.guardBreakFrames) * 0.7]
     case 'hitstun':
       return [p.juggle % 2 ? 'Hit_A' : 'Hit_B', clamp01(1 - p.timer / 20)]
     case 'down':

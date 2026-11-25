@@ -1,9 +1,15 @@
-// Keyboard to controls. WASD or arrows to move, Shift sprint, Space jump,
-// J light attack, K heavy attack, L block (hold), C dash.
-// Only the engine's real-time mode listens to the keyboard. In test mode the
-// keyboard is ignored entirely, so a stray key press can never make a test flaky.
-// Controllers (Xbox, Switch) come last, through the Gamepad API, behind the same
-// controls() shape.
+// Keyboard + mouse to controls.
+//
+//   WASD / arrows  move (relative to the camera)     Shift  sprint
+//   Space          jump; again in the air = double jump
+//   Mouse          look around (click the arena first: it captures the mouse,
+//                  Esc lets go). Wheel = zoom.
+//   Left click     light attack (J)                  Right click  heavy attack (K)
+//   F (or L)       block, hold                       C            dash
+//
+// Only the engine's real-time mode listens. In test mode input is ignored
+// entirely, so a stray key press can never make a test flaky. Controllers (Xbox,
+// Switch) come last, through the Gamepad API, behind the same controls() shape.
 
 const KEYS = {
   KeyW: 'up',
@@ -19,17 +25,22 @@ const KEYS = {
   Space: 'jump',
   KeyJ: 'light',
   KeyK: 'heavy',
+  KeyF: 'block',
   KeyL: 'block',
   KeyC: 'dash',
 }
 
 // Buttons where a tap matters (as opposed to holding).
 const TAPS = ['jump', 'light', 'heavy', 'dash']
+const MOUSE_BUTTONS = { 0: 'light', 2: 'heavy' }
 
-export function createKeyboard(target = window) {
+export function createControls(target = window, surface = null) {
   const held = new Set()
   // A tap pressed and released between two reads still counts once.
   const tapped = { jump: false, light: false, heavy: false, dash: false }
+  // Mouse movement since the last look() read.
+  const look = { dx: 0, dy: 0, wheel: 0 }
+  const locked = () => surface && document.pointerLockElement === surface
 
   // Don't steal keys while the user is typing in a form field somewhere.
   const typing = (e) => {
@@ -37,11 +48,15 @@ export function createKeyboard(target = window) {
     return el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
   }
 
+  function press(key, repeat = false) {
+    if (TAPS.includes(key) && !repeat) tapped[key] = true
+    held.add(key)
+  }
+
   function down(e) {
     const key = KEYS[e.code]
     if (!key || typing(e)) return
-    if (TAPS.includes(key) && !e.repeat) tapped[key] = true
-    held.add(key)
+    press(key, e.repeat)
     e.preventDefault() // arrows and space would otherwise scroll the page
   }
   function up(e) {
@@ -53,9 +68,46 @@ export function createKeyboard(target = window) {
     held.clear()
   }
 
+  // The first click captures the mouse (it is not an attack); after that,
+  // left/right click attack.
+  function mouseDown(e) {
+    if (!surface) return
+    if (!locked()) {
+      surface.requestPointerLock?.()
+      return
+    }
+    const key = MOUSE_BUTTONS[e.button]
+    if (key) {
+      press(key)
+      e.preventDefault()
+    }
+  }
+  function mouseUp(e) {
+    const key = MOUSE_BUTTONS[e.button]
+    if (key) held.delete(key)
+  }
+  function mouseMove(e) {
+    if (!locked()) return
+    look.dx += e.movementX
+    look.dy += e.movementY
+  }
+  function wheel(e) {
+    if (!surface) return
+    look.wheel += Math.sign(e.deltaY)
+    e.preventDefault()
+  }
+  const noMenu = (e) => e.preventDefault()
+
   target.addEventListener('keydown', down)
   target.addEventListener('keyup', up)
   target.addEventListener('blur', clear)
+  if (surface) {
+    surface.addEventListener('mousedown', mouseDown)
+    target.addEventListener('mouseup', mouseUp)
+    target.addEventListener('mousemove', mouseMove)
+    surface.addEventListener('wheel', wheel, { passive: false })
+    surface.addEventListener('contextmenu', noMenu)
+  }
 
   return {
     // Read once per simulation tick batch:
@@ -73,11 +125,29 @@ export function createKeyboard(target = window) {
       }
       return out
     },
+    // Mouse movement (pixels) and wheel steps since the last call.
+    look() {
+      const out = { ...look }
+      look.dx = look.dy = look.wheel = 0
+      return out
+    },
+    locked,
     dispose() {
       target.removeEventListener('keydown', down)
       target.removeEventListener('keyup', up)
       target.removeEventListener('blur', clear)
+      if (surface) {
+        surface.removeEventListener('mousedown', mouseDown)
+        target.removeEventListener('mouseup', mouseUp)
+        target.removeEventListener('mousemove', mouseMove)
+        surface.removeEventListener('wheel', wheel)
+        surface.removeEventListener('contextmenu', noMenu)
+        if (locked()) document.exitPointerLock?.()
+      }
       held.clear()
     },
   }
 }
+
+// Kept for older imports.
+export const createKeyboard = createControls

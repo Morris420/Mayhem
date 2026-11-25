@@ -8,6 +8,7 @@
 //   attack     in a move from moves.js (startup -> active -> recovery)
 //   block      holding block: no damage from the front
 //   blockstun  just blocked a hit, can't act for a moment
+//   guardbreak the guard meter ran out: stunned and wide open
 //   hitstun    just got hit, can't act (this is what makes combos possible)
 //   dash       a quick burst; the first frames dodge everything
 //   down       knocked off their feet
@@ -36,6 +37,9 @@ export function createFighter(world, { id, spawn, facing = { x: 0, z: -1 } }) {
     invuln: 0, // frames nothing can hit you
     dashCd: 0, // frames before you can dash again
     juggle: 0, // hits taken since you last recovered (the combo counter)
+    guard: COMBAT.guardMax, // the guard meter: blocking drains it, it refills when you stop
+    guardMax: COMBAT.guardMax,
+    guardDelay: 0, // frames before the guard starts refilling
     buf: null, // a recent attack press not used yet: 'light' | 'heavy'
     bufFrames: 0, // ...and how many more frames it stays valid
   }
@@ -110,12 +114,22 @@ function respawn(f) {
   f.body.state.facing.x = f.spawnFacing.x
   f.body.state.facing.z = f.spawnFacing.z
   c.hp = c.maxHp
+  c.guard = c.guardMax
   c.state = 'free'
   c.timer = 0
   c.move = null
   c.queued = null
   c.juggle = 0
   c.invuln = 30
+}
+
+// The guard ran out: stunned, open to anything, guard refills from empty.
+function breakGuard(f) {
+  const c = f.c
+  c.guard = 0
+  c.state = 'guardbreak'
+  c.timer = COMBAT.guardBreakFrames
+  c.guardDelay = COMBAT.guardBreakFrames
 }
 
 // One fixed step of one fighter. ctl = its controls this step, in world space:
@@ -152,6 +166,17 @@ export function stepFighter(f, ctl, fighters, dt) {
   if (c.invuln > 0) c.invuln--
   if (c.dashCd > 0) c.dashCd--
 
+  // The guard meter: holding block costs a little, then it refills after a pause.
+  if (c.state === 'block') {
+    c.guard = Math.max(0, c.guard - COMBAT.guardHoldDrain / 60)
+    c.guardDelay = COMBAT.guardRegenDelay
+  } else if (c.guardDelay > 0) {
+    c.guardDelay--
+  } else if (c.state !== 'guardbreak') {
+    c.guard = Math.min(c.guardMax, c.guard + COMBAT.guardRegen / 60)
+  }
+  const canGuard = c.guard >= COMBAT.guardMinToBlock
+
   const opp = nearestOpponent(f, fighters)
   const keepFacing = { x: s.facing.x, z: s.facing.z }
 
@@ -178,13 +203,15 @@ export function stepFighter(f, ctl, fighters, dt) {
     case 'getup':
     case 'hitstun':
     case 'blockstun':
+    case 'guardbreak':
       if (--c.timer <= 0) {
         c.state = 'free'
         c.juggle = 0
       }
       break
     case 'block':
-      if (!ctl.block) c.state = 'free'
+      if (c.guard <= 0) breakGuard(f)
+      else if (!ctl.block) c.state = 'free'
       else if (ctl.dashPressed && c.dashCd === 0) startDash(f, ctl)
       else if (ctl.lightPressed) {
         useBuffer()
@@ -221,7 +248,7 @@ export function stepFighter(f, ctl, fighters, dt) {
     } else if (ctl.heavyPressed && s.grounded) {
       useBuffer()
       startMove(f, 'H', opp)
-    } else if (ctl.block && s.grounded) c.state = 'block'
+    } else if (ctl.block && s.grounded && canGuard) c.state = 'block'
   }
 
   // --- what the body may do in this state ---
@@ -308,15 +335,25 @@ export function resolveHits(fighters) {
       let stop
       let type
       if (blocked) {
-        tc.state = 'blockstun'
-        tc.timer = m.blockstun
+        tc.guard = Math.max(0, tc.guard - (m.guard ?? m.damage * 2))
+        tc.guardDelay = COMBAT.guardRegenDelay
         ts.vel.x = s.facing.x * m.push
         ts.vel.z = s.facing.z * m.push
         stop = COMBAT.blockHitstop
-        type = 'block'
+        if (tc.guard <= 0) {
+          breakGuard(t)
+          type = 'guardbreak'
+        } else {
+          tc.state = 'blockstun'
+          tc.timer = m.blockstun
+          type = 'block'
+        }
       } else {
         tc.hp = Math.max(0, tc.hp - m.damage)
-        tc.juggle = tc.state === 'hitstun' || tc.state === 'down' ? tc.juggle + 1 : 1
+        tc.juggle =
+          tc.state === 'hitstun' || tc.state === 'down' || tc.state === 'guardbreak'
+            ? tc.juggle + 1
+            : 1
         tc.move = null
         tc.queued = null
         ts.vel.x = s.facing.x * m.push
@@ -324,7 +361,7 @@ export function resolveHits(fighters) {
         if (tc.hp === 0 || m.knockdown) {
           tc.state = tc.hp === 0 ? 'ko' : 'down'
           tc.timer = tc.hp === 0 ? COMBAT.koFrames : COMBAT.knockdownFrames
-          ts.vel.y = COMBAT.knockUp
+          ts.vel.y = m.launch ?? COMBAT.knockUp
           ts.grounded = false
         } else {
           tc.state = 'hitstun'
@@ -342,6 +379,7 @@ export function resolveHits(fighters) {
         move: c.move,
         damage: blocked ? 0 : m.damage,
         combo: blocked ? 0 : tc.juggle,
+        guard: tc.guard,
         heavy: m.hitstop >= 9,
         x: (hx + ts.pos.x) / 2,
         y: ts.pos.y + 0.3,

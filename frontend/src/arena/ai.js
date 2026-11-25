@@ -19,6 +19,7 @@ export const AI = {
   blockSeeRange: 3, // ...if you start it this close
   thinkMin: 18, // frames between decisions when in range
   thinkSpread: 30,
+  guardKeep: 35, // won't start blocking with less guard than this left
 }
 
 export function createBrain(mode = 'auto') {
@@ -71,7 +72,7 @@ export function think(b, self, foe, rng) {
   // See an attack coming: maybe block it (decided once per attack).
   if (b.mode === 'auto' && foe.c.state === 'attack' && foe.c.moveCount !== b.seenMove) {
     b.seenMove = foe.c.moveCount
-    if (d < AI.blockSeeRange && canAct && rng() < AI.blockChance) {
+    if (d < AI.blockSeeRange && canAct && sc.guard > AI.guardKeep && rng() < AI.blockChance) {
       b.blockFor = MOVES[foe.c.move].startup + MOVES[foe.c.move].active + 14
     }
   }
@@ -146,7 +147,7 @@ export function think(b, self, foe, rng) {
     ctl.lightPressed = true
   } else if (r < 0.65) {
     ctl.heavyPressed = true
-  } else if (r < 0.85) {
+  } else if (r < 0.85 && sc.guard > AI.guardKeep) {
     b.blockFor = 30 + Math.floor(rng() * 30)
     ctl.block = true
   } else {

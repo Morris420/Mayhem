@@ -27,7 +27,7 @@ function sparkTexture() {
   return new THREE.CanvasTexture(canvas)
 }
 
-const COLORS = { hit: '#ffcf6e', ko: '#ffffff', block: '#5fe3f5' }
+const COLORS = { hit: '#ffcf6e', ko: '#ffffff', block: '#5fe3f5', guardbreak: '#bdf6ff' }
 
 export function createEffects(scene) {
   const tex = sparkTexture()
@@ -49,9 +49,16 @@ export function createEffects(scene) {
       sprite.position.set(e.x, e.y, e.z)
       sprite.renderOrder = 2
       scene.add(sprite)
-      const big = e.type === 'ko' ? 2.2 : e.heavy ? 1.6 : e.type === 'block' ? 0.8 : 1.1
+      const big =
+        e.type === 'ko' || e.type === 'guardbreak'
+          ? 2.2
+          : e.heavy
+            ? 1.6
+            : e.type === 'block'
+              ? 0.8
+              : 1.1
       live.push({ sprite, age: 0, life: e.type === 'ko' ? 0.35 : 0.2, big })
-      if (e.heavy || e.type === 'ko') {
+      if (e.heavy || e.type === 'ko' || e.type === 'guardbreak') {
         shake = e.type === 'ko' ? 0.3 : 0.16
         shakePower = e.type === 'ko' ? 0.16 : 0.08
       }

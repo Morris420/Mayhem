@@ -52,6 +52,7 @@ const motion = (p) => {
   return p.wall ? 'wall' : !p.grounded ? 'airborne' : p.sprinting ? 'sprinting' : 'grounded'
 }
 const pct = (f) => `${Math.round((100 * f.hp) / f.maxHp)}%`
+const guardPct = (f) => `${Math.round((100 * f.guard) / f.guardMax)}%`
 
 // One decimal, a space where the minus sign would be so the columns don't jump,
 // and never "-0.0".
@@ -96,6 +97,14 @@ const fmt = (n) => {
               :style="{ width: pct(hud.player) }"
             ></div>
           </div>
+          <div class="mt-1 h-1 w-2/3 overflow-hidden rounded-sm bg-black/60">
+            <div
+              data-testid="guard-player"
+              class="h-full bg-sky-200/80 transition-[width] duration-150"
+              :class="hud.player.combat === 'guardbreak' ? 'bg-amber-300' : ''"
+              :style="{ width: guardPct(hud.player) }"
+            ></div>
+          </div>
         </div>
         <div v-if="hud.dummy" class="flex-1">
           <div class="mb-1 flex justify-between text-[11px] font-semibold tracking-widest">
@@ -111,6 +120,16 @@ const fmt = (n) => {
               :style="{ width: pct(hud.dummy) }"
             ></div>
           </div>
+          <div
+            class="mt-1 ml-auto flex h-1 w-2/3 justify-end overflow-hidden rounded-sm bg-black/60"
+          >
+            <div
+              data-testid="guard-dummy"
+              class="h-full bg-rose-100/80 transition-[width] duration-150"
+              :class="hud.dummy.combat === 'guardbreak' ? 'bg-amber-300' : ''"
+              :style="{ width: guardPct(hud.dummy) }"
+            ></div>
+          </div>
         </div>
       </div>
 
@@ -123,7 +142,7 @@ const fmt = (n) => {
       </div>
 
       <div
-        class="pointer-events-none absolute left-3 top-14 rounded-lg border border-cyan-900/60 bg-black/50 px-3 py-1.5 font-mono text-[11px] leading-5 text-cyan-200/90 backdrop-blur-sm"
+        class="pointer-events-none absolute left-3 top-[4.5rem] rounded-lg border border-cyan-900/60 bg-black/50 px-3 py-1.5 font-mono text-[11px] leading-5 text-cyan-200/90 backdrop-blur-sm"
       >
         <div data-testid="arena-pos">
           pos {{ fmt(hud.player.pos.x) }} {{ fmt(hud.player.pos.y) }} {{ fmt(hud.player.pos.z) }}
@@ -136,13 +155,14 @@ const fmt = (n) => {
       <div
         class="pointer-events-none absolute inset-x-3 bottom-3 mx-auto max-w-max rounded-2xl border border-cyan-900/60 bg-black/50 px-4 py-1.5 text-center text-xs leading-5 text-slate-300 backdrop-blur-sm"
       >
+        <span class="font-mono text-cyan-300">Click</span> to look around (Esc lets go) ·
         <span class="font-mono text-cyan-300">WASD</span> move ·
         <span class="font-mono text-cyan-300">Shift</span> sprint ·
-        <span class="font-mono text-cyan-300">Space</span> jump ·
+        <span class="font-mono text-cyan-300">Space</span> jump, again = double jump ·
         <span class="font-mono text-cyan-300">C</span> dash ·
-        <span class="font-mono text-cyan-300">J</span> light ·
-        <span class="font-mono text-cyan-300">K</span> heavy ·
-        <span class="font-mono text-cyan-300">L</span> block (hold) · J J J / J J K combos
+        <span class="font-mono text-cyan-300">Left click</span> punch (×3 = jab, cross, uppercut) ·
+        <span class="font-mono text-cyan-300">Right click</span> heavy ·
+        <span class="font-mono text-cyan-300">F</span> guard (hold)
       </div>
     </template>
   </section>

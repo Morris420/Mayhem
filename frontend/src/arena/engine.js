@@ -25,17 +25,23 @@ import {
   setShadowBlocks,
 } from './figure.js'
 import { createEffects } from './effects.js'
-import { createKeyboard } from './input.js'
+import { createControls } from './input.js'
+import { createShield } from './shield.js'
 import { createFixedStep, stepsFor, STEP_S } from './loop.js'
 
-// The camera. Exploring: fixed, behind and above the player, looking towards -z.
-// In a fight (an opponent within framingRange): it eases round to a three-quarter
-// view of the line between the two fighters, so they never hide each other, and
-// looks at the middle of the fight. The stick is always relative to the camera.
-// Set fightAngle to 0 for a camera that stays straight behind the fight.
+// The camera orbits the player under mouse control (click the arena to capture
+// the mouse, Esc to let go; wheel zooms). It starts behind the player looking
+// towards -z. When an opponent is near, it looks at the middle of the fight and
+// pulls in a little. The stick is always relative to where the camera looks.
 export const CAMERA = {
-  distance: 8,
-  height: 4.4,
+  distance: 8, // metres, horizontally, behind what it looks at
+  pitch: 0.423, // radians above horizontal (~24°): with distance 8 = 4.4 m up
+  minPitch: 0.05,
+  maxPitch: 1.2,
+  minDistance: 4,
+  maxDistance: 14,
+  sensitivity: 0.0025, // radians per pixel of mouse movement
+  zoomStep: 0.8, // metres per wheel notch
   lookHeight: 0.8,
   fov: 55,
   wallMargin: 1.8, // keep the camera this far from walls: close neon strips glare
@@ -43,9 +49,8 @@ export const CAMERA = {
   followY: 6, // how quickly the camera follows a jump (1/s); lower = calmer
   framing: 0.5, // how far towards a nearby opponent the camera looks (0 = not at all)
   framingRange: 12, // ...when they are within this many metres
-  fightAngle: 50, // degrees off the fight line the camera looks from (90 = Tekken side view)
-  fightDistance: 7, // metres from the middle of the fight
-  fightEase: 2.5, // how quickly the camera swings in and out (1/s)
+  fightZoom: 0.85, // in a fight the camera comes this much closer
+  fightEase: 2.5, // how quickly it eases in and out of fight framing (1/s)
 }
 
 // Bloom: subtle. Raise `strength` for more glow, lower `threshold` to make more
@@ -99,7 +104,8 @@ export async function createArena(
 
   // --- simulation -----------------------------------------------------------
   const sim = createSimulation(room, { seed, dummy })
-  const keyboard = test ? null : createKeyboard(window)
+  // Keyboard on the window, mouse on the canvas (pointer lock needs an element).
+  const keyboard = test ? null : createControls(window, renderer.domElement)
   const clock = createFixedStep()
 
   // --- fighters' looks: one model, a clone per fighter -------------------------
@@ -120,6 +126,13 @@ export async function createArena(
     scene.add(fig.object)
     return fig
   })
+  // A guard shield per fighter, in their own colour.
+  const shields = sim.fighters.map((f) => {
+    const sh = createShield(f.id === 'dummy' ? room.colors.enemy : room.colors.trim)
+    scene.add(sh.object)
+    return sh
+  })
+  const fighterIndex = Object.fromEntries(sim.fighters.map((f, i) => [f.id, i]))
 
   const camera = new THREE.PerspectiveCamera(CAMERA.fov, 1, 0.1, 140)
 
@@ -181,7 +194,10 @@ export async function createArena(
     }
   }
   function flushEvents() {
-    for (const e of pending) effects.spawn(e)
+    for (const e of pending) {
+      effects.spawn(e)
+      if (e.type === 'block') shields[fighterIndex[e.target]]?.hit()
+    }
     pending = []
   }
 
@@ -191,12 +207,16 @@ export async function createArena(
   const inner = { x: room.width / 2 - CAMERA.wallMargin, z: room.depth / 2 - CAMERA.wallMargin }
   let camY = null // smoothed height the camera follows
   let engaged = 0 // 0 = exploring, 1 = fighting someone close (eased)
-  const camDir = { x: 0, z: -1 } // the camera's horizontal look direction (eased)
-  const FA = (CAMERA.fightAngle * Math.PI) / 180
-  const rot = (v, a) => ({
-    x: v.x * Math.cos(a) - v.z * Math.sin(a),
-    z: v.x * Math.sin(a) + v.z * Math.cos(a),
-  })
+  // Mouse-controlled orbit. yaw 0 = looking towards -z.
+  const view = { yaw: 0, pitch: CAMERA.pitch, distance: CAMERA.distance }
+  const camDir = { x: 0, z: -1 } // horizontal look direction, from yaw
+  function setView(yaw, pitch, distance) {
+    view.yaw = yaw
+    view.pitch = Math.max(CAMERA.minPitch, Math.min(CAMERA.maxPitch, pitch))
+    view.distance = Math.max(CAMERA.minDistance, Math.min(CAMERA.maxDistance, distance))
+    camDir.x = -Math.sin(view.yaw)
+    camDir.z = -Math.cos(view.yaw)
+  }
   let elapsed = 0
 
   // dt: real seconds since the last frame, for render-only smoothing and effects.
@@ -208,15 +228,16 @@ export async function createArena(
       z: prev[i].z + (curr[i].z - prev[i].z) * alpha,
     }))
     figures.forEach((fig, i) => fig.place(pos[i], lerpAngle(prev[i].yaw, curr[i].yaw, alpha)))
+    const st = sim.state()
+    shields.forEach((sh, i) => sh.update(i === 0 ? st.player : st.dummy, pos[i], dt))
     effects.update(dt)
     elapsed += dt
 
     const me = pos[0]
     camY =
       camY === null || dt === 0 ? me.y : camY + (me.y - camY) * Math.min(1, dt * CAMERA.followY)
-    // How much we are in a fight, and the direction to view it from.
+    // How close a fight is: the camera frames it when someone is near.
     let near = 0
-    let want = { x: 0, z: -1 }
     let fx = 0
     let fz = 0
     if (pos[1]) {
@@ -224,34 +245,22 @@ export async function createArena(
       fz = pos[1].z - me.z
       const d = Math.sqrt(fx * fx + fz * fz)
       near = Math.min(1, Math.max(0, (CAMERA.framingRange - d) / 4))
-      if (d > 1e-3) {
-        // Three-quarter view: the fight line turned by fightAngle, to whichever
-        // side the camera already is, so it never flips across.
-        const axis = { x: fx / d, z: fz / d }
-        const a = rot(axis, FA)
-        const b = rot(axis, -FA)
-        const fight = a.x * camDir.x + a.z * camDir.z >= b.x * camDir.x + b.z * camDir.z ? a : b
-        want = { x: want.x + (fight.x - want.x) * near, z: want.z + (fight.z - want.z) * near }
-      }
     }
-    const k = dt === 0 ? 1 : Math.min(1, dt * CAMERA.fightEase)
-    engaged = dt === 0 ? near : engaged + (near - engaged) * k
-    camDir.x += (want.x - camDir.x) * k
-    camDir.z += (want.z - camDir.z) * k
-    const cl = Math.sqrt(camDir.x * camDir.x + camDir.z * camDir.z) || 1
-    camDir.x /= cl
-    camDir.z /= cl
+    engaged = dt === 0 ? near : engaged + (near - engaged) * Math.min(1, dt * CAMERA.fightEase)
 
-    // Look at the player, or the middle of the fight.
+    // Look at the player, or the middle of the fight, from where the mouse put us.
     const lx = me.x + fx * CAMERA.framing * engaged
     const lz = me.z + fz * CAMERA.framing * engaged
     look.set(lx, camY + CAMERA.lookHeight, lz)
-    const dist = CAMERA.distance + (CAMERA.fightDistance - CAMERA.distance) * engaged
+    const dist = view.distance * (1 - (1 - CAMERA.fightZoom) * engaged)
     const shake = effects.shakeOffset(elapsed)
-    // Kept inside the walls and below their top: close neon strips glare.
+    // Kept inside the walls, above the floor and below the top of the walls.
     camera.position.set(
       Math.max(-inner.x, Math.min(inner.x, lx - camDir.x * dist)) + shake.x,
-      Math.min(camY + CAMERA.height, room.wallHeight - CAMERA.belowTop) + shake.y,
+      Math.max(
+        0.6,
+        Math.min(look.y + dist * Math.tan(view.pitch), room.wallHeight - CAMERA.belowTop),
+      ) + shake.y,
       Math.max(-inner.z, Math.min(inner.z, lz - camDir.z * dist)),
     )
     camera.lookAt(look)
@@ -292,6 +301,14 @@ export async function createArena(
       const steps = clock.advance(delta)
       // Read the keys only when the simulation will actually step, so a quick
       // tap on a fast monitor (frames with no step) is not read and lost.
+      const m = keyboard.look()
+      if (m.dx || m.dy || m.wheel) {
+        setView(
+          view.yaw - m.dx * CAMERA.sensitivity,
+          view.pitch + m.dy * CAMERA.sensitivity,
+          view.distance + m.wheel * CAMERA.zoomStep,
+        )
+      }
       if (steps > 0) sim.setInput({ ...keyboard.controls(), view: { ...camDir } })
       for (let i = 0; i < steps; i++) stepOnce()
       flushEvents()
@@ -363,6 +380,14 @@ export async function createArena(
     },
     seed: (n) => sim.seed(n),
     dummy: (mode) => sim.setDummyMode(mode),
+    // Point the camera: yaw/pitch in degrees (yaw 0 = looking towards -z), distance
+    // in metres. The stick follows it, as with the mouse.
+    camera({ yaw = 0, pitch = (CAMERA.pitch * 180) / Math.PI, distance = CAMERA.distance } = {}) {
+      setView((yaw * Math.PI) / 180, (pitch * Math.PI) / 180, distance)
+      sim.setInput({ view: { ...camDir } })
+      draw(1, 0)
+      return { ...camDir }
+    },
     snapshot: () => sim.snapshot(),
     restore(snap) {
       sim.restore(snap)
@@ -408,6 +433,7 @@ export async function createArena(
       figure: figures[0].kind,
       clip: figures[0].current?.() ?? null,
       dummyClip: figures[1]?.current?.() ?? null,
+      shield: shields.map((sh) => sh.size()),
       sparks: effects.count(),
       drawCalls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
@@ -425,6 +451,7 @@ export async function createArena(
     resizeObserver.disconnect()
     keyboard?.dispose()
     for (const fig of figures) fig.dispose?.()
+    for (const sh of shields) sh.dispose()
     effects.dispose()
     disposeTree(scene)
     bloom.dispose()

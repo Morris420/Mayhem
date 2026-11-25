@@ -156,6 +156,7 @@ frontend/src/arena/
   combat.js     fighters: body + combat state machine, hits, block, dash, pushboxes     [M2b]
   ai.js         the training dummy's brain: produces the same controls a player does    [M2b]
   effects.js    hit sparks and camera shake (render-only, driven by sim events)        [M2b]
+  shield.js     the guard shield sphere (render-only; size = guard meter)
   boss.js       the boss: stat block, AI state machine, telegraphs, hitboxes
   combat.js     damage, cooldowns, stamina, hit resolution, the fight result
   hud/          Vue components for bars, cooldowns, the result screen

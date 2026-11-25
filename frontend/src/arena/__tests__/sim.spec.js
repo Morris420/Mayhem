@@ -219,15 +219,71 @@ describe('jumping', () => {
     sim.dispose()
   })
 
-  it('cannot jump in mid-air (no double jump)', () => {
+  it('double jump: Space again in the air goes a little higher than the first jump', () => {
     const sim = createSimulation(room)
     run(sim, 1000)
     sim.press('jump')
     steps(sim, 20)
+    const y1 = sim.state().player.pos.y
+    sim.press('jump')
+    sim.step()
+    const p = sim.state().player
+    expect(p.jumps).toBe(2)
+    expect(p.lastJump).toBe('double')
+    expect(p.vel.y).toBeGreaterThan(MOVE.jumpSpeed * 0.95)
+    // From the moment of the double jump, it climbs higher than a whole first jump.
+    let top = -Infinity
+    for (let i = 0; i < 60; i++) {
+      sim.step()
+      top = Math.max(top, sim.state().player.pos.y)
+    }
+    expect(top - y1).toBeGreaterThan((MOVE.jumpSpeed ** 2 / (2 * MOVE.gravity)) * 0.95)
+    sim.dispose()
+  })
+
+  it('only one double jump until you land', () => {
+    const sim = createSimulation(room)
+    run(sim, 1000)
+    sim.press('jump')
+    steps(sim, 15)
+    sim.press('jump')
+    steps(sim, 15)
     sim.press('jump')
     steps(sim, 3)
-    expect(sim.state().player.jumps).toBe(1)
-    sim.dispose()
+    expect(sim.state().player.jumps).toBe(2)
+    run(sim, 2000) // land; the double jump comes back
+    sim.press('jump')
+    steps(sim, 15)
+    sim.press('jump')
+    sim.step()
+    expect(sim.state().player.jumps).toBe(4)
+  })
+
+  it('the double jump carries you the way you steer', () => {
+    const sim = createSimulation(room)
+    run(sim, 1000)
+    sim.press('jump') // straight up
+    steps(sim, 20)
+    sim.setInput({ x: 1 }) // steer right, then double jump
+    sim.press('jump')
+    sim.step()
+    const v = sim.state().player.vel
+    expect(v.x).toBeGreaterThan(MOVE.doubleJumpPush * 0.95)
+    expect(Math.abs(v.z)).toBeLessThan(0.01)
+  })
+
+  it('with no direction held, the double jump keeps your momentum', () => {
+    const sim = createSimulation(room)
+    run(sim, 1000)
+    sim.setInput({ y: 1 }) // run forward (-z) and jump
+    run(sim, 500)
+    sim.press('jump')
+    steps(sim, 15)
+    sim.setInput({ y: 0 })
+    sim.press('jump')
+    sim.step()
+    const v = sim.state().player.vel
+    expect(v.z).toBeLessThan(-MOVE.doubleJumpPush * 0.95)
   })
 
   it('coyote time: a jump just after walking off a ledge still works', () => {
@@ -253,13 +309,16 @@ describe('jumping', () => {
     run(sim, 500)
     sim.press('jump')
     steps(sim, 2) // take off
+    sim.press('jump') // use up the double jump straight away
+    steps(sim, 2)
     // Fall until a few steps before touching down, then press again.
     let n = 0
     while ((sim.state().player.vel.y > 0 || sim.state().player.pos.y > STAND_Y + 0.25) && n++ < 200)
       sim.step()
     sim.setInput({ jump: true }) // press ~0.1 s before landing, keep holding
     steps(sim, 30)
-    expect(sim.state().player.jumps).toBe(2)
+    expect(sim.state().player.jumps).toBe(3)
+    expect(sim.state().player.lastJump).toBe('ground')
     sim.dispose()
   })
 
@@ -344,7 +403,11 @@ describe('wall hug and wall jump', () => {
     sim.dispose()
   })
 
-  it('no wall jump without a wall', () => {
+  it('the wall jump goes higher than a normal jump', () => {
+    expect(MOVE.wallJumpUp).toBeGreaterThan(MOVE.jumpSpeed)
+  })
+
+  it('no wall jump without a wall (the second press is a double jump)', () => {
     const sim = createSimulation(room)
     sim.teleport(onFloor(0, 0))
     run(sim, 300)
@@ -352,7 +415,7 @@ describe('wall hug and wall jump', () => {
     steps(sim, 25)
     sim.press('jump')
     sim.step()
-    expect(sim.state().player.jumps).toBe(1)
+    expect(sim.state().player.lastJump).toBe('double')
     sim.dispose()
   })
 })
@@ -408,7 +471,7 @@ describe('determinism, the parts online play needs', () => {
     // + - * / and sqrt are exactly rounded everywhere; these are not.
     const risky =
       /Math\.(sin|cos|tan|asin|acos|atan|atan2|hypot|pow|exp|log|cbrt|sinh|cosh|tanh)\b|\*\*/
-    for (const file of ['physics.js', 'player.js']) {
+    for (const file of ['physics.js', 'player.js', 'combat.js', 'ai.js', 'moves.js']) {
       const src = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')
       const code = src
         .split('\n')

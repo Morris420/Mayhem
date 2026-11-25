@@ -1,34 +1,41 @@
 # Starting the next session
 
-Paste the block below into a **new chat** (new, so it picks up the setting that allows package
-installs). Everything after it is in the docs folder.
+Paste the block below into a **new chat**. Everything after it is in the docs folder.
 
 ---
 
-I'm Morrison, working on **Mayhem** — my Solo Leveling style productivity app. Laravel 13 API +
-Vue 3 SPA, repo `Morris420/Mayhem`, branch `main`. Attach and clone that repo first.
+I'm Morrison, working on **Mayhem**, my Solo Leveling style productivity app. Repo
+`Morris420/Mayhem`. Attach and clone it, then create and work on a branch called `arena`
+(`main` is the live site; finished milestones go to `main` by pull request).
 
-Read these in the repo, in this order:
+**The project.** A Laravel 13 API (Sanctum SPA auth, MySQL locally via XAMPP, SQLite in tests)
+and a Vue 3 SPA (Vite, Pinia, Vue Router, Tailwind 4). Quests with XP and E–S ranks, nine
+OSRS-style skills, gym and nutrition tracking, achievements, a calendar with Google sync, a
+Briefcase, and an AI coach on Gemini. The rule everywhere: the server owns every number that
+counts.
 
-- `docs/roadmap.md` — where we are, and the arena decisions waiting for me
-- `docs/system-guide.md` — what every feature does and how the code behind it works
-- `docs/arena-design.md` — the combat game: scope, why three.js, the combat maths, milestones
-- `docs/arena-playbook.md` — the implementation brief: conventions, harness, three.js notes, gotchas
+**The arena** is a 3D Tekken-style anime fighter on `/arena`, where my trained skills become
+(lightly) my combat stats, built to be played online later with rollback netcode.
+- **Stack:** three.js for rendering, plus **our own deterministic simulation**: no physics
+  library, only exactly-rounded maths, with `snapshot()`/`restore()` for rollback.
+- **Models:** a KayKit (CC0) placeholder hunter for now. Planned: my own VRoid Studio model
+  with Mixamo animations via `@pixiv/three-vrm`.
+- **Tests:** Vitest for the simulation, Playwright for the browser suite (in the repo, run with
+  `npm run test:e2e`), glTF-Transform for preparing models.
+- **Later:** WebRTC for netplay.
 
-**Where we are.** The productivity app is finished and I use it daily. The arena is a 3D
-Tekken-style anime fighter built for rollback netplay (`docs/arena-design.md` §0). Done: a dark
-neon hall, movement (sprint, jump, wall jump, dash), the fighter kit (J/K strings, block, hitstop,
-knockdowns, all frame data in `moves.js`), an AI training dummy on the same kit, a 3/4 fight
-camera, on our own deterministic engine with snapshot/restore. The hunter model is a KayKit
-placeholder. The browser harness lives in the repo (`cd frontend && npm run test:e2e`).
+Read these in order before doing anything:
+1. `docs/arena-build-guide.md`: where the game stands, the rules that must not be broken,
+   how to work, the milestones A–G with what "done" means, and the production checklist.
+2. `docs/roadmap.md`
+3. `docs/arena-playbook.md`: conventions, the test harness, gotchas we already hit
+4. `docs/arena-design.md` (§0 has my decisions) and `docs/system-guide.md` (the app)
 
-**Today:** [pick one]
-- *If my VRoid model + Mixamo clips are in the folder I connect:* load the VRM, retarget the
-  Mixamo clips, map them in `figure.js` (`LOCO`, `MOVE_CLIPS`), keep the raw Mixamo files out of
-  the repo (docs/arena-assets.md).
-- *Otherwise:* stats and abilities from my skills (server-side `ArenaRules` + `/api/arena/loadout`,
-  small effect as decided), and a first ability: a fire bolt.
+**Today:** start milestone **A** in the build guide if I've attached or connected my VRoid
+model and Mixamo clips; otherwise start milestone **C** (stats and abilities from my skills,
+first ability a fire bolt).
 
-Work the way the playbook says: take the whole milestone, run the unit tests, `php artisan test`
-and the browser suite, show me a screenshot, commit and push, update `docs/roadmap.md`. Ask me
-only about things that are genuinely mine to decide.
+**How to work:** take the whole milestone, test it (unit, browser, backend if touched), show
+me a screenshot, commit and push to `arena`, and update `docs/roadmap.md`. Ask me only what
+is genuinely mine to decide (feel, looks, balance); otherwise pick the recommended option,
+tell me which, and keep going.

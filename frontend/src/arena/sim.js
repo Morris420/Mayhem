@@ -165,6 +165,8 @@ export function createSimulation(room, { seed = 1, dummy = 'none' } = {}) {
       moveFrame: c.moveFrame,
       moveCount: c.moveCount,
       hitstop: c.hitstop,
+      guard: c.guard,
+      guardMax: c.guardMax,
       invuln: c.invuln,
       juggle: c.juggle,
     }

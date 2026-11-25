@@ -51,7 +51,7 @@ describe('hits', () => {
       attacker: 'player',
       target: 'dummy',
       move: 'L1',
-      damage: 5,
+      damage: MOVES.L1.damage,
       combo: 1,
     })
     expect(sim.state().dummy.hp).toBe(COMBAT.maxHp - MOVES.L1.damage)
@@ -103,6 +103,16 @@ describe('hits', () => {
 })
 
 describe('strings (combos)', () => {
+  it('the combo is left jab, right cross, uppercut; the uppercut deals 1.5x the jab', () => {
+    expect([MOVES.L1.name, MOVES.L2.name, MOVES.L3.name]).toEqual([
+      'Left jab',
+      'Right cross',
+      'Uppercut',
+    ])
+    expect(MOVES.L3.damage).toBe(MOVES.L1.damage * 1.5)
+    expect(MOVES.L3.knockdown).toBe(true)
+  })
+
   it('Light, Light, Light: three hits that combo and end in a knockdown', () => {
     const sim = face(1)
     sim.press('light')
@@ -114,7 +124,7 @@ describe('strings (combos)', () => {
     const hits = ev.filter((e) => e.type === 'hit')
     expect(hits.map((e) => e.move)).toEqual(['L1', 'L2', 'L3'])
     expect(hits.map((e) => e.combo)).toEqual([1, 2, 3]) // the dummy never recovered in between
-    expect(sim.state().dummy.hp).toBe(100 - 5 - 6 - 10)
+    expect(sim.state().dummy.hp).toBe(100 - 6 - 7 - 9)
   })
 
   it('the spin kick knocks down; the dummy gets up again and is hittable', () => {
@@ -127,7 +137,7 @@ describe('strings (combos)', () => {
     until(sim, (s) => s.dummy.combat === 'down')
     until(sim, (s) => s.dummy.combat === 'getup')
     until(sim, (s) => s.dummy.combat === 'free')
-    expect(sim.state().dummy.hp).toBe(100 - 5 - 6 - 10)
+    expect(sim.state().dummy.hp).toBe(100 - 6 - 7 - 9)
   })
 
   it('Light into Heavy: the rising strike finisher', () => {
@@ -215,10 +225,58 @@ describe('block', () => {
     sim.setInput({ block: true })
     sim.step()
     sim.setDummyMode('attack')
-    const ev = run(sim, 4000)
+    const ev = run(sim, 1200) // one string; hold longer and the guard meter runs out
     expect(ev.length).toBeGreaterThan(0)
     expect(ev.every((e) => e.type === 'block' && e.target === 'player')).toBe(true)
     expect(sim.state().player.hp).toBe(COMBAT.maxHp)
+  })
+})
+
+describe('guard meter', () => {
+  it('blocking costs guard; it refills after you stop', () => {
+    const sim = face(1, 'block')
+    run(sim, 200)
+    const g0 = sim.state().dummy.guard
+    sim.press('heavy')
+    run(sim, 800)
+    const g1 = sim.state().dummy.guard
+    expect(g1).toBeLessThan(g0 - MOVES.H.guard + 1)
+    sim.setDummyMode('idle')
+    run(sim, 4000)
+    expect(sim.state().dummy.guard).toBeGreaterThan(g1 + 20)
+  })
+
+  it('holding block slowly drains it, even without being hit', () => {
+    const sim = face(6, 'block')
+    run(sim, 3000)
+    const g = sim.state().dummy.guard
+    expect(g).toBeLessThan(COMBAT.guardMax - COMBAT.guardHoldDrain * 2.5)
+    expect(g).toBeGreaterThan(COMBAT.guardMax - COMBAT.guardHoldDrain * 3.5)
+  })
+
+  it('at zero: guard break, stunned and open, then hits land', () => {
+    const sim = face(1, 'block')
+    run(sim, 200)
+    const ev = []
+    for (let i = 0; i < 8 && !ev.some((e) => e.type === 'guardbreak'); i++) {
+      sim.press('heavy')
+      ev.push(...run(sim, 900))
+    }
+    expect(ev.some((e) => e.type === 'guardbreak')).toBe(true)
+    expect(sim.state().dummy.combat).toBe('guardbreak')
+    expect(sim.state().dummy.guard).toBe(0)
+    sim.press('light')
+    const after = run(sim, 400)
+    expect(after.some((e) => e.type === 'hit' && e.target === 'dummy')).toBe(true)
+  })
+
+  it('cannot raise a guard with an empty meter', () => {
+    const sim = face(1)
+    sim.fighters[1].c.guard = 0
+    sim.fighters[1].c.guardDelay = 600 // and it is not refilling yet
+    sim.setDummyMode('block')
+    run(sim, 200)
+    expect(sim.state().dummy.combat).toBe('free')
   })
 })
 

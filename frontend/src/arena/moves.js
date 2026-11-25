@@ -14,11 +14,14 @@
 //   radius     size of the hit sphere, metres
 //   lunge      m/s forward step at the start of the move
 //   knockdown  true = the victim is knocked off their feet
+//   launch     m/s upward on knockdown (defaults to COMBAT.knockUp)
+//   guard      guard meter taken from a blocker (see COMBAT.guardMax)
 //   next       which button continues the string, and into what
 //   air        true = a jump attack (keeps your momentum)
 //
-// Strings: Light, Light, Light   = jab, jab, spin kick (knockdown)
-//          Light, (Light,) Heavy = jab(s) into a launcher finisher (knockdown)
+// Strings: Light, Light, Light   = left jab, right cross, uppercut (knockdown).
+//                                  The uppercut deals 1.5x the jab (sim.spec checks it).
+//          Light, (Light,) Heavy = jab(s) into a rising kick finisher (knockdown)
 //          Heavy                 = slow, far-reaching, heavy hit
 //
 // Hitstun is always longer than the attacker's recovery + the next hit's
@@ -26,11 +29,12 @@
 // combo rather than three separate hits (sim.spec checks it).
 export const MOVES = {
   L1: {
-    name: 'Jab',
+    name: 'Left jab',
+    guard: 12,
     startup: 6,
     active: 3,
     recovery: 12,
-    damage: 5,
+    damage: 6,
     hitstun: 18,
     blockstun: 10,
     push: 2.5,
@@ -41,11 +45,12 @@ export const MOVES = {
     next: { light: 'L2', heavy: 'LH' },
   },
   L2: {
-    name: 'Cross',
+    name: 'Right cross',
+    guard: 14,
     startup: 7,
     active: 3,
     recovery: 14,
-    damage: 6,
+    damage: 7,
     hitstun: 20,
     blockstun: 11,
     push: 2.5,
@@ -56,11 +61,13 @@ export const MOVES = {
     next: { light: 'L3', heavy: 'LH' },
   },
   L3: {
-    name: 'Spin kick',
+    name: 'Uppercut',
+    guard: 22,
     startup: 11,
     active: 4,
     recovery: 20,
-    damage: 10,
+    damage: 9, // 1.5 x the left jab
+    launch: 8, // pops them up
     hitstun: 0,
     blockstun: 14,
     push: 6,
@@ -71,7 +78,8 @@ export const MOVES = {
     knockdown: true,
   },
   LH: {
-    name: 'Rising strike',
+    name: 'Rising kick',
+    guard: 26,
     startup: 14,
     active: 4,
     recovery: 22,
@@ -87,6 +95,7 @@ export const MOVES = {
   },
   H: {
     name: 'Heavy blow',
+    guard: 30,
     startup: 16,
     active: 4,
     recovery: 24,
@@ -101,6 +110,7 @@ export const MOVES = {
   },
   AIR: {
     name: 'Jump kick',
+    guard: 14,
     startup: 5,
     active: 6,
     recovery: 10,
@@ -138,4 +148,11 @@ export const COMBAT = {
   knockUp: 5, // m/s upward when knocked down
   hitHeight: 1.1, // vertical tolerance of a hit around the target's centre
   inputBuffer: 8, // frames an attack press is remembered (during hitstop it waits)
+  // The guard meter: blocking costs it, it refills when you stop blocking.
+  guardMax: 100,
+  guardHoldDrain: 4, // per second just for holding block
+  guardRegen: 15, // per second once you have stopped blocking...
+  guardRegenDelay: 60, // ...for this many frames
+  guardBreakFrames: 50, // stunned and open when the guard hits zero
+  guardMinToBlock: 10, // can't raise a guard below this
 }
